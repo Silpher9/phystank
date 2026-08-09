@@ -8,7 +8,7 @@ import { createRicochetContinuation, HitOutcome, resolveHit } from "./core/balli
 import { getFacetForMesh, getFacetNormalFromPick, type TankEntity } from "./tank/tank";
 
 export const RICOCHET_EPSILON = 0.02;
-const TUNING = { speed: 45, gravity: 9.81, lifetime: 4, arenaLimit: 17, caliber: 75, penetration: 150 };
+const TUNING = { speed: 45, gravity: 9.81, lifetime: 4, arenaLimit: 17, caliber: 75, penetration: 150, targetHeight: 1.2 };
 
 export function offsetRicochetOrigin(hitPoint: Vector3, normal: Vector3): Vector3 {
   return hitPoint.add(normal.scale(RICOCHET_EPSILON));
@@ -24,9 +24,8 @@ export class ShellSystem {
     if (horizontal.lengthSquared() < 0.01) return;
     const distance = horizontal.length();
     const direction = horizontal.normalize();
-    // Flat, distance-aware arc: visible without becoming artillery.
-    const elevation = Math.min(0.18, 0.035 + distance * 0.004);
-    const velocity = new Vector3(direction.x, elevation, direction.z).normalize().scale(TUNING.speed);
+    const velocity = calculateBallisticVelocity(origin, direction, distance, TUNING.targetHeight);
+    if (!velocity) return;
     this.shells.push(new Shell(this.scene, owner, origin, velocity, TUNING.penetration, 0));
   }
 
@@ -37,9 +36,20 @@ export class ShellSystem {
   }
 }
 
+/** Low-root trajectory that passes through the selected armor height. */
+export function calculateBallisticVelocity(origin: Vector3, horizontalDirection: Vector3, distance: number, targetHeight: number): Vector3 | null {
+  const speedSquared = TUNING.speed ** 2;
+  const heightDifference = targetHeight - origin.y;
+  const discriminant = speedSquared ** 2 - TUNING.gravity * (TUNING.gravity * distance ** 2 + 2 * heightDifference * speedSquared);
+  if (discriminant < 0 || distance <= 0) return null;
+  const angle = Math.atan((speedSquared - Math.sqrt(discriminant)) / (TUNING.gravity * distance));
+  return horizontalDirection.scale(Math.cos(angle) * TUNING.speed).add(new Vector3(0, Math.sin(angle) * TUNING.speed, 0));
+}
+
 class Shell {
   private readonly mesh;
   private age = 0;
+  private firstSegment = true;
   constructor(private readonly scene: Scene, private readonly owner: TankEntity, private position: Vector3, private velocity: Vector3, private penetration: number, private ricochets: number) {
     this.mesh = MeshBuilder.CreateSphere("shell", { diameter: 0.14 }, scene);
     this.mesh.position.copyFrom(position);
@@ -58,7 +68,7 @@ class Shell {
     const ray = new Ray(this.position, segment.normalize(), length);
     const pick = this.scene.pickWithRay(ray, (mesh) => {
       const facet = getFacetForMesh(mesh);
-      return Boolean(facet) && !mesh.isDescendantOf(this.owner.root);
+      return Boolean(facet) && (!this.firstSegment || !mesh.isDescendantOf(this.owner.root));
     });
 
     if (pick?.hit && pick.pickedPoint) {
@@ -78,6 +88,7 @@ class Shell {
             this.penetration = continuation.penetration;
             this.ricochets = continuation.ricochetCount;
             this.mesh.position.copyFrom(this.position);
+            this.firstSegment = false;
             return true;
           }
         }
@@ -85,6 +96,7 @@ class Shell {
       return this.dispose(); // penetration and shatter both stop here.
     }
     this.position = next;
+    this.firstSegment = false;
     this.mesh.position.copyFrom(next);
     return this.age < TUNING.lifetime && Math.abs(next.x) < TUNING.arenaLimit && Math.abs(next.z) < TUNING.arenaLimit && next.y > -2;
   }
