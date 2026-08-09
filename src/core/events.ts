@@ -6,9 +6,9 @@ export type GameEvents = {
   SHOT_FIRED: { shellId: string; tank: string; muzzlePosition: Vector3; direction: Vector3 };
   SHELL_MOVED: { shellId: string; position: Vector3 };
   SHELL_DESPAWNED: { shellId: string; position: Vector3 };
-  HIT: { outcome: HitOutcome; facetId: ArmorFacetId; point: Vector3; normal: Vector3; impactAngleDegrees: number };
+  HIT: { shellId: string; outcome: HitOutcome; facetId: ArmorFacetId; point: Vector3; normal: Vector3; impactAngleDegrees: number; nominalThickness: number; effectiveThickness: number; penetration: number };
   OBJECT_HIT: { targetId: string; category: HitCategory.HARD | HitCategory.SOFT; outcome: ObjectHitOutcome; point: Vector3; normal: Vector3; incoming: Vector3; impactAngleDegrees: number | null };
-  RICOCHET: { point: Vector3; incoming: Vector3; outgoing: Vector3; retainedSpeed: number };
+  RICOCHET: { shellId: string; point: Vector3; incoming: Vector3; outgoing: Vector3; retainedSpeed: number };
   DRIVE_STATE: { acceleration: number; turnRate: number; speed: number };
 };
 

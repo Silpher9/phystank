@@ -127,11 +127,15 @@ class Shell {
         this.moveTo(pick.pickedPoint);
 
         if (result.armorHit) this.events.emit("HIT", {
+          shellId: this.id,
           outcome: result.armorHit.outcome,
           facetId: result.armorHit.facetId,
           point: toEventVector(pick.pickedPoint),
           normal: toEventVector(normal),
           impactAngleDegrees: result.armorHit.impactAngleDegrees,
+          nominalThickness: result.armorHit.nominalThickness,
+          effectiveThickness: result.armorHit.effectiveThickness,
+          penetration: result.armorHit.penetration,
         });
 
         if (result.objectHit) this.events.emit("OBJECT_HIT", {
@@ -156,6 +160,7 @@ class Shell {
         if (result.action === "RICOCHET" && result.continuation) {
           const continuation = result.continuation;
           this.events.emit("RICOCHET", {
+            shellId: this.id,
             point: toEventVector(pick.pickedPoint),
             incoming: toEventVector(incoming),
             outgoing: toEventVector(continuation.direction),

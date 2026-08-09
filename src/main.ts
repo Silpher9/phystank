@@ -13,6 +13,7 @@ import { createArena } from "./arena-scene";
 import { createPlayerCamera, followPlayer } from "./camera";
 import { HitFeedbackSystem } from "./vfx/hit-feedback";
 import { createRenderingStack } from "./vfx/rendering";
+import { DebugOverlaySystem } from "./debug/debug-overlay";
 import "./styles.css";
 
 const canvas = document.querySelector<HTMLCanvasElement>("#game-canvas");
@@ -26,11 +27,16 @@ const engine = new Engine(canvas, true, {
   stencil: true,
 });
 
-const { scene, playerTank, camera } = createScene(engine);
+const { scene, playerTank, tanks, camera } = createScene(engine);
 document.querySelector(".loading")?.remove();
 createRenderingStack(scene, camera);
 
 const gameEvents = new GameEventBus();
+const debugOverlay = new DebugOverlaySystem(scene, gameEvents, tanks, {
+  panel: document.querySelector<HTMLElement>("#debug-overlay"),
+  facets: document.querySelector<HTMLElement>("#debug-facets"),
+  hit: document.querySelector<HTMLElement>("#debug-hit"),
+});
 const hitFeedback = new HitFeedbackSystem(
   scene,
   camera,
@@ -48,6 +54,7 @@ engine.runRenderLoop(() => {
   followPlayer(camera, playerTank.root.position);
   shellSystem.update(deltaSeconds);
   hitFeedback.update(deltaSeconds);
+  debugOverlay.update();
   updateReloadHud(playerController);
   scene.render();
 });
@@ -56,6 +63,7 @@ window.addEventListener("resize", () => engine.resize());
 function createScene(engine: Engine): {
   scene: Scene;
   playerTank: TankEntity;
+  tanks: readonly TankEntity[];
   camera: ReturnType<typeof createPlayerCamera>;
 } {
   const scene = new Scene(engine);
@@ -81,7 +89,7 @@ function createScene(engine: Engine): {
     rotationY: Math.PI / 8,
     color: Color3.FromHexString("#777f47"),
   });
-  createTank(scene, {
+  const targetTank = createTank(scene, {
     name: "allrounder-demo",
     profile: "ALLROUNDER",
     position: new Vector3(5.5, 0, -2.5),
@@ -89,7 +97,7 @@ function createScene(engine: Engine): {
     color: Color3.FromHexString("#536d75"),
   });
   followPlayer(camera, playerTank.root.position);
-  return { scene, playerTank, camera };
+  return { scene, playerTank, tanks: [playerTank, targetTank], camera };
 }
 
 function createPlayerController(
@@ -116,6 +124,12 @@ function createPlayerController(
   });
   return controller;
 }
+
+window.addEventListener("keydown", (event) => {
+  if (event.code !== "F3") return;
+  event.preventDefault();
+  debugOverlay.toggle();
+});
 
 function readDriveInput(): { forward: number; turn: number } {
   const forward = Number(isKeyDown("KeyW")) - Number(isKeyDown("KeyS"));

@@ -58,6 +58,9 @@ export type ImpactResolution = Readonly<{
     outcome: HitOutcome;
     facetId: ArmorFacetId;
     impactAngleDegrees: number;
+    nominalThickness: number;
+    effectiveThickness: number;
+    penetration: number;
   }>;
   objectHit?: Readonly<{
     category: HitCategory.HARD | HitCategory.SOFT;
@@ -86,6 +89,9 @@ const IMPACT_RESOLVERS: { [C in HitCategory]: ImpactResolver<C> } = {
       outcome: result.outcome,
       facetId: target.facetId,
       impactAngleDegrees: result.impactAngleDegrees,
+      nominalThickness: target.thickness,
+      effectiveThickness: result.effectiveArmor,
+      penetration: input.penetration,
     };
     if (result.outcome !== HitOutcome.RICOCHET) {
       return { action: "STOP", armorHit };
