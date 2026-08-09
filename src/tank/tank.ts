@@ -1,4 +1,3 @@
-import type { PickingInfo } from "@babylonjs/core/Collisions/pickingInfo";
 import { Color3 } from "@babylonjs/core/Maths/math.color";
 import { Vector3 } from "@babylonjs/core/Maths/math.vector";
 import type { AbstractMesh } from "@babylonjs/core/Meshes/abstractMesh";
@@ -6,6 +5,8 @@ import { MeshBuilder } from "@babylonjs/core/Meshes/meshBuilder";
 import { TransformNode } from "@babylonjs/core/Meshes/transformNode";
 import type { Scene } from "@babylonjs/core/scene";
 import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
+import { HitCategory } from "../core/impacts";
+import { registerHitTarget } from "../hit-targets";
 import { ARMOR_PROFILES, type ArmorFacetId, type ArmorProfile, type ArmorProfileId } from "./armor";
 
 export type TankFacet = Readonly<{
@@ -29,8 +30,6 @@ export type CreateTankOptions = Readonly<{
   rotationY?: number;
   color: Color3;
 }>;
-
-const FACET_BY_MESH = new WeakMap<AbstractMesh, TankFacet>();
 
 type PlateLayout = Readonly<{
   width: number;
@@ -170,30 +169,6 @@ export function createTank(scene: Scene, options: CreateTankOptions): TankEntity
   return { root, turret, cannon, profile, facets };
 }
 
-/** Returns armor data only when the picked mesh is one of the named plates. */
-export function getFacetForMesh(mesh: AbstractMesh | null | undefined): TankFacet | undefined {
-  return mesh ? FACET_BY_MESH.get(mesh) : undefined;
-}
-
-/**
- * Reads the world-space normal from the picked geometry, instead of recreating
- * a slope angle in gameplay code. Returns null for non-armor or invalid picks.
- */
-export function getFacetNormalFromPick(pick: PickingInfo): Vector3 | null {
-  if (!getFacetForMesh(pick.pickedMesh) || !pick.hit) return null;
-
-  // Babylon flips a picked normal toward the ray. Restore the plate's outward
-  // geometric orientation so resolveHit can reject inside-out contacts.
-  const normal = pick.getNormal(true, false);
-  const hitPoint = pick.pickedPoint;
-  const mesh = pick.pickedMesh;
-  if (!normal || !hitPoint || !mesh) return null;
-
-  const outward = hitPoint.subtract(mesh.getBoundingInfo().boundingBox.centerWorld);
-  if (Vector3.Dot(normal, outward) < 0) normal.negateInPlace();
-  return normal.normalize();
-}
-
 function createPlate(
   name: string,
   layout: PlateLayout,
@@ -211,7 +186,12 @@ function createPlate(
 
 function registerFacet(id: ArmorFacetId, profile: ArmorProfile, mesh: AbstractMesh): TankFacet {
   const facet = { id, thickness: profile.thicknessByFacet[id], mesh };
-  FACET_BY_MESH.set(mesh, facet);
+  registerHitTarget(mesh, {
+    category: HitCategory.ARMOR,
+    targetId: mesh.name,
+    facetId: id,
+    thickness: facet.thickness,
+  });
   return facet;
 }
 

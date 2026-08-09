@@ -4,11 +4,12 @@ import { Vector3 } from "@babylonjs/core/Maths/math.vector";
 import { MeshBuilder } from "@babylonjs/core/Meshes/meshBuilder";
 import type { Scene } from "@babylonjs/core/scene";
 import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
-import { createRicochetContinuation, HitOutcome, resolveHit } from "./core/ballistics";
 import type { Vector3 as EventVector3 } from "./core/ballistics";
 import type { GameEventBus } from "./core/events";
+import { resolveImpact } from "./core/impacts";
 import { ARENA_SIZE, WALL_THICKNESS } from "./arena";
-import { getFacetForMesh, getFacetNormalFromPick, type TankEntity } from "./tank/tank";
+import { getHitNormalFromPick, getHitTarget } from "./hit-targets";
+import type { TankEntity } from "./tank/tank";
 
 export const RICOCHET_EPSILON = 0.02;
 const TUNING = {
@@ -94,16 +95,24 @@ class Shell {
     const length = segment.length();
     const ray = new Ray(this.position, segment.normalize(), length);
     const pick = this.scene.pickWithRay(ray, (mesh) => {
-      const facet = getFacetForMesh(mesh);
-      return Boolean(facet) && (!this.firstSegment || !mesh.isDescendantOf(this.owner.root));
+      const target = getHitTarget(mesh);
+      return Boolean(target) && (!this.firstSegment || !mesh.isDescendantOf(this.owner.root));
     });
 
     if (pick?.hit && pick.pickedPoint) {
-      const facet = getFacetForMesh(pick.pickedMesh);
-      const normal = getFacetNormalFromPick(pick);
-      if (facet && normal) {
-        const result = resolveHit({ shellDirection: this.velocity, facetNormal: normal, armorThickness: facet.thickness, shellCaliber: TUNING.caliber, penetration: this.penetration, ricochetCount: this.ricochets });
-        if (result === null) {
+      const target = getHitTarget(pick.pickedMesh);
+      const normal = getHitNormalFromPick(pick);
+      if (target && normal) {
+        const incoming = this.velocity.normalizeToNew();
+        const result = resolveImpact(target, {
+          shellDirection: this.velocity,
+          facetNormal: normal,
+          speed: this.velocity.length(),
+          penetration: this.penetration,
+          shellCaliber: TUNING.caliber,
+          ricochetCount: this.ricochets,
+        });
+        if (result.action === "IGNORE") {
           // An inside-out facet contact is not a hit. Finish this frame's full
           // segment instead of inching through armor one epsilon at a time.
           this.position = next;
@@ -111,22 +120,44 @@ class Shell {
           this.firstSegment = false;
           return this.withinBounds(next);
         }
-        this.events.emit("HIT", {
-          outcome: result.outcome,
-          facetId: facet.id,
+
+        if (result.armorHit) this.events.emit("HIT", {
+          outcome: result.armorHit.outcome,
+          facetId: result.armorHit.facetId,
           point: toEventVector(pick.pickedPoint),
           normal: toEventVector(normal),
-          impactAngleDegrees: result.impactAngleDegrees,
+          impactAngleDegrees: result.armorHit.impactAngleDegrees,
         });
-        if (result.outcome === HitOutcome.RICOCHET) {
-          const continuation = createRicochetContinuation({ shellDirection: this.velocity, facetNormal: normal, speed: this.velocity.length(), penetration: this.penetration, ricochetCount: this.ricochets });
+
+        if (result.objectHit) this.events.emit("OBJECT_HIT", {
+          targetId: result.objectHit.targetId,
+          category: result.objectHit.category,
+          outcome: result.objectHit.outcome,
+          point: toEventVector(pick.pickedPoint),
+          normal: toEventVector(normal),
+          incoming: toEventVector(incoming),
+          impactAngleDegrees: result.objectHit.impactAngleDegrees,
+        });
+
+        if (result.action === "PASS_THROUGH") {
+          if (result.destroyTarget) pick.pickedMesh?.dispose();
+          this.position = pick.pickedPoint.add(incoming.scale(RICOCHET_EPSILON));
+          this.velocity = incoming.scale(result.retainedSpeed ?? this.velocity.length());
+          this.penetration = result.retainedPenetration ?? this.penetration;
+          this.mesh.position.copyFrom(this.position);
+          this.firstSegment = false;
+          return true;
+        }
+
+        if (result.action === "RICOCHET" && result.continuation) {
+          const continuation = result.continuation;
           this.events.emit("RICOCHET", {
             point: toEventVector(pick.pickedPoint),
-            incoming: toEventVector(this.velocity.normalizeToNew()),
+            incoming: toEventVector(incoming),
             outgoing: toEventVector(continuation.direction),
             retainedSpeed: continuation.speed,
           });
-          if (result.shouldSpawnContinuation && continuation.shouldSpawn) {
+          if (continuation.shouldSpawn) {
             this.position = offsetRicochetOrigin(pick.pickedPoint, new Vector3(normal.x, normal.y, normal.z));
             this.velocity = new Vector3(
               continuation.direction.x,
@@ -141,7 +172,7 @@ class Shell {
           }
         }
       }
-      return this.dispose(); // penetration and shatter both stop here.
+      return this.dispose();
     }
     this.position = next;
     this.firstSegment = false;
