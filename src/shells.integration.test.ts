@@ -89,4 +89,60 @@ describe("shell integration", () => {
     expect(crate.isDisposed()).toBe(true);
     scene.dispose(); engine.dispose();
   });
+
+  it("ricochets from sloped hard cover and destroys soft cover in its new path", () => {
+    const engine = new NullEngine();
+    const scene = new Scene(engine);
+    const events = new GameEventBus();
+    const objectHits: GameEvents["OBJECT_HIT"][] = [];
+    const ricochets: GameEvents["RICOCHET"][] = [];
+    const shells = new ShellSystem(scene, events);
+    events.on("OBJECT_HIT", (event) => objectHits.push(event));
+    events.on("RICOCHET", (event) => ricochets.push(event));
+    const player = createTank(scene, {
+      name: "ricochet-chain-player",
+      profile: "BRAWLER",
+      position: new Vector3(0, 0, 6),
+      color: Color3.White(),
+    });
+    const plate = MeshBuilder.CreateBox(
+      "sloped-hard-plate",
+      { width: 8, height: 5, depth: 0.4 },
+      scene,
+    );
+    plate.position.set(0, 2.1, 0);
+    plate.rotation.y = 80 * Math.PI / 180;
+    registerHitTarget(plate, {
+      category: HitCategory.HARD,
+      targetId: "sloped-hard-plate",
+      equivalentArmor: 400,
+    });
+    const crate = MeshBuilder.CreateBox(
+      "ricochet-chain-crate",
+      { width: 4, height: 4, depth: 3 },
+      scene,
+    );
+    crate.position.set(3, 1.9, -8);
+    registerHitTarget(crate, {
+      category: HitCategory.SOFT,
+      targetId: "ricochet-chain-crate",
+      retainedSpeed: 0.8,
+      retainedPenetration: 0.7,
+    });
+    scene.meshes.forEach((mesh) => mesh.computeWorldMatrix(true));
+
+    shells.fire(player, new Vector3(0, 0, -12));
+    for (let frame = 0; frame < 300 && !crate.isDisposed(); frame++) {
+      shells.update(1 / 120);
+    }
+
+    expect(objectHits.map(({ targetId, outcome }) => ({ targetId, outcome }))).toEqual([
+      { targetId: "sloped-hard-plate", outcome: ObjectHitOutcome.RICOCHET },
+      { targetId: "ricochet-chain-crate", outcome: ObjectHitOutcome.DESTROYED },
+    ]);
+    expect(ricochets).toHaveLength(1);
+    expect(ricochets[0].outgoing.x).toBeGreaterThan(0);
+    expect(crate.isDisposed()).toBe(true);
+    scene.dispose(); engine.dispose();
+  });
 });
