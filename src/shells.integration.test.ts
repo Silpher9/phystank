@@ -17,9 +17,13 @@ describe("shell integration", () => {
     const scene = new Scene(engine);
     const events = new GameEventBus();
     const shots: GameEvents["SHOT_FIRED"][] = [];
+    const movements: GameEvents["SHELL_MOVED"][] = [];
+    const despawns: GameEvents["SHELL_DESPAWNED"][] = [];
     const hits: GameEvents["HIT"][] = [];
     const shells = new ShellSystem(scene, events);
     events.on("SHOT_FIRED", (event) => shots.push(event));
+    events.on("SHELL_MOVED", (event) => movements.push(event));
+    events.on("SHELL_DESPAWNED", (event) => despawns.push(event));
     events.on("HIT", (event) => hits.push(event));
     const player = createTank(scene, { name: "player", profile: "BRAWLER", position: new Vector3(-5.5, 0, 2.5), rotationY: Math.PI / 8, color: Color3.White() });
     const target = createTank(scene, { name: "target", profile: "ALLROUNDER", position: new Vector3(5.5, 0, -2.5), rotationY: -Math.PI * 0.78, color: Color3.Gray() });
@@ -29,6 +33,11 @@ describe("shell integration", () => {
     expect(shots).toHaveLength(1);
     expect(shots[0].tank).toBe("player");
     expect(Math.hypot(shots[0].direction.x, shots[0].direction.y, shots[0].direction.z)).toBeCloseTo(1);
+    expect(movements.length).toBeGreaterThan(0);
+    expect(movements.every(({ shellId }) => shellId === shots[0].shellId)).toBe(true);
+    expect(despawns).toEqual([
+      expect.objectContaining({ shellId: shots[0].shellId }),
+    ]);
     expect(hits.length).toBeGreaterThan(0);
     expect(Object.values(HitOutcome)).toContain(hits[0].outcome);
     expect(hits[0].facetId).toBeTruthy();

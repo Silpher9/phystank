@@ -19,6 +19,7 @@ export type TankEntity = Readonly<{
   root: TransformNode;
   turret: TransformNode;
   cannon: AbstractMesh;
+  muzzle: TransformNode;
   profile: ArmorProfile;
   facets: Readonly<Record<ArmorFacetId, TankFacet>>;
 }>;
@@ -166,7 +167,11 @@ export function createTank(scene: Scene, options: CreateTankOptions): TankEntity
   cannon.material = armorMaterial;
   cannon.isPickable = false;
 
-  return { root, turret, cannon, profile, facets };
+  const muzzle = new TransformNode(`${options.name}-muzzle`, scene);
+  muzzle.parent = cannon;
+  muzzle.position.z = -1.25;
+
+  return { root, turret, cannon, muzzle, profile, facets };
 }
 
 function createPlate(
