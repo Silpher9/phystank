@@ -1,17 +1,15 @@
 import { Engine } from "@babylonjs/core/Engines/engine";
 import { DirectionalLight } from "@babylonjs/core/Lights/directionalLight";
 import { HemisphericLight } from "@babylonjs/core/Lights/hemisphericLight";
-import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
 import { Color3, Color4 } from "@babylonjs/core/Maths/math.color";
 import { Vector3 } from "@babylonjs/core/Maths/math.vector";
-import { MeshBuilder } from "@babylonjs/core/Meshes/meshBuilder";
 import { Scene } from "@babylonjs/core/scene";
 import { Plane } from "@babylonjs/core/Maths/math.plane";
 import { TankController } from "./tank/controls";
 import { createTank, type TankEntity } from "./tank/tank";
 import { ShellSystem } from "./shells";
 import { GameEventBus } from "./core/events";
-import { ARENA_SIZE, WALL_HEIGHT, WALL_THICKNESS } from "./arena";
+import { createArena } from "./arena-scene";
 import { createPlayerCamera, followPlayer } from "./camera";
 import "./styles.css";
 
@@ -128,34 +126,4 @@ function updateReloadHud(controller: TankController): void {
   if (!hud) return;
   const progress = Math.round(controller.reloadProgress * 100);
   hud.textContent = controller.isReloading ? `HERLADEN ${progress}%` : "KANON GEREED — spatie = vuren";
-}
-
-function createArena(scene: Scene): void {
-  const ground = MeshBuilder.CreateGround("arena-ground", { width: ARENA_SIZE, height: ARENA_SIZE }, scene);
-  const groundMaterial = new StandardMaterial("ground-material", scene);
-  groundMaterial.diffuseColor = Color3.FromHexString("#465146");
-  groundMaterial.specularColor = Color3.Black();
-  ground.material = groundMaterial;
-
-  const wallMaterial = new StandardMaterial("wall-material", scene);
-  wallMaterial.diffuseColor = Color3.FromHexString("#758170");
-  wallMaterial.specularColor = Color3.Black();
-
-  const halfArena = ARENA_SIZE / 2;
-  const walls = [
-    { name: "north-boundary", width: ARENA_SIZE + WALL_THICKNESS * 2, depth: WALL_THICKNESS, x: 0, z: -halfArena },
-    { name: "south-boundary", width: ARENA_SIZE + WALL_THICKNESS * 2, depth: WALL_THICKNESS, x: 0, z: halfArena },
-    { name: "west-boundary", width: WALL_THICKNESS, depth: ARENA_SIZE, x: -halfArena, z: 0 },
-    { name: "east-boundary", width: WALL_THICKNESS, depth: ARENA_SIZE, x: halfArena, z: 0 },
-  ];
-
-  for (const wall of walls) {
-    const mesh = MeshBuilder.CreateBox(
-      wall.name,
-      { width: wall.width, depth: wall.depth, height: WALL_HEIGHT },
-      scene,
-    );
-    mesh.position.set(wall.x, WALL_HEIGHT / 2, wall.z);
-    mesh.material = wallMaterial;
-  }
 }

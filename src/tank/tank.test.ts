@@ -5,7 +5,8 @@ import { Scene } from "@babylonjs/core/scene";
 import type { PickingInfo } from "@babylonjs/core/Collisions/pickingInfo";
 import { describe, expect, it } from "vitest";
 import { resolveHit } from "../core/ballistics";
-import { createTank, getFacetNormalFromPick, HULL_PLATE_LAYOUT } from "./tank";
+import { getHitNormalFromPick } from "../hit-targets";
+import { createTank, HULL_PLATE_LAYOUT } from "./tank";
 
 describe("hull armor geometry", () => {
   it("overlaps the roof with side and rear plates so no grazing seams exist", () => {
@@ -39,7 +40,7 @@ describe("hull armor geometry", () => {
       getNormal: () => new Vector3(0, 0, -1),
     } as unknown as PickingInfo;
 
-    const outwardNormal = getFacetNormalFromPick(pick);
+    const outwardNormal = getHitNormalFromPick(pick);
     expect(outwardNormal?.z).toBeCloseTo(1);
     expect(
       resolveHit({

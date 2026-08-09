@@ -1,10 +1,13 @@
 import { NullEngine } from "@babylonjs/core/Engines/nullEngine";
 import { Color3 } from "@babylonjs/core/Maths/math.color";
 import { Vector3 } from "@babylonjs/core/Maths/math.vector";
+import { MeshBuilder } from "@babylonjs/core/Meshes/meshBuilder";
 import { Scene } from "@babylonjs/core/scene";
 import { describe, expect, it } from "vitest";
 import { HitOutcome } from "./core/ballistics";
 import { GameEventBus, type GameEvents } from "./core/events";
+import { HitCategory, ObjectHitOutcome } from "./core/impacts";
+import { registerHitTarget } from "./hit-targets";
 import { ShellSystem } from "./shells";
 import { createTank } from "./tank/tank";
 
@@ -48,6 +51,33 @@ describe("shell integration", () => {
     for (let frame = 0; frame < 240 && hits.length === 0; frame++) shells.update(1 / 60);
 
     expect(hits.length).toBeGreaterThan(0);
+    scene.dispose(); engine.dispose();
+  });
+
+  it("destroys soft cover, continues, and then stops on a hard wall", () => {
+    const engine = new NullEngine();
+    const scene = new Scene(engine);
+    const events = new GameEventBus();
+    const objectHits: GameEvents["OBJECT_HIT"][] = [];
+    const shells = new ShellSystem(scene, events);
+    events.on("OBJECT_HIT", (event) => objectHits.push(event));
+    const player = createTank(scene, { name: "object-test-player", profile: "BRAWLER", position: new Vector3(0, 0, 6), color: Color3.White() });
+    const crate = MeshBuilder.CreateBox("test-crate", { width: 3, height: 3, depth: 1 }, scene);
+    crate.position.set(0, 1.5, 0);
+    registerHitTarget(crate, { category: HitCategory.SOFT, targetId: "test-crate", retainedSpeed: 0.8, retainedPenetration: 0.7 });
+    const wall = MeshBuilder.CreateBox("test-wall", { width: 5, height: 3, depth: 1 }, scene);
+    wall.position.set(0, 1.5, -5);
+    registerHitTarget(wall, { category: HitCategory.HARD, targetId: "test-wall", equivalentArmor: 400 });
+    scene.meshes.forEach((mesh) => mesh.computeWorldMatrix(true));
+
+    shells.fire(player, wall.position.clone());
+    for (let frame = 0; frame < 240 && objectHits.length < 2; frame++) shells.update(1 / 60);
+
+    expect(objectHits.map(({ targetId, outcome }) => ({ targetId, outcome }))).toEqual([
+      { targetId: "test-crate", outcome: ObjectHitOutcome.DESTROYED },
+      { targetId: "test-wall", outcome: ObjectHitOutcome.STOPPED },
+    ]);
+    expect(crate.isDisposed()).toBe(true);
     scene.dispose(); engine.dispose();
   });
 });
