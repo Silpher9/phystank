@@ -77,10 +77,12 @@ class Shell {
       if (facet && normal) {
         const result = resolveHit({ shellDirection: this.velocity, facetNormal: normal, armorThickness: facet.thickness, shellCaliber: TUNING.caliber, penetration: this.penetration, ricochetCount: this.ricochets });
         if (result === null) {
-          this.position = pick.pickedPoint.add(this.velocity.clone().normalize().scale(RICOCHET_EPSILON));
-          this.mesh.position.copyFrom(this.position);
+          // An inside-out facet contact is not a hit. Finish this frame's full
+          // segment instead of inching through armor one epsilon at a time.
+          this.position = next;
+          this.mesh.position.copyFrom(next);
           this.firstSegment = false;
-          return true;
+          return this.withinBounds(next);
         }
         this.onHit?.(result.outcome);
         if (result?.outcome === HitOutcome.RICOCHET && result.shouldSpawnContinuation) {
@@ -105,8 +107,12 @@ class Shell {
     this.position = next;
     this.firstSegment = false;
     this.mesh.position.copyFrom(next);
-    return this.age < TUNING.lifetime && Math.abs(next.x) < TUNING.arenaLimit && Math.abs(next.z) < TUNING.arenaLimit && next.y > -2;
+    return this.withinBounds(next);
   }
 
   private dispose(): false { this.mesh.dispose(); return false; }
+
+  private withinBounds(position: Vector3): boolean {
+    return this.age < TUNING.lifetime && Math.abs(position.x) < TUNING.arenaLimit && Math.abs(position.z) < TUNING.arenaLimit && position.y > -2;
+  }
 }
