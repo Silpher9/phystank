@@ -5,6 +5,8 @@ import { MeshBuilder } from "@babylonjs/core/Meshes/meshBuilder";
 import type { Scene } from "@babylonjs/core/scene";
 import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
 import { createRicochetContinuation, HitOutcome, resolveHit } from "./core/ballistics";
+import type { Vector3 as EventVector3 } from "./core/ballistics";
+import type { GameEventBus } from "./core/events";
 import { getFacetForMesh, getFacetNormalFromPick, type TankEntity } from "./tank/tank";
 
 export const RICOCHET_EPSILON = 0.02;
@@ -16,7 +18,10 @@ export function offsetRicochetOrigin(hitPoint: Vector3, normal: Vector3): Vector
 
 export class ShellSystem {
   private readonly shells: Shell[] = [];
-  constructor(private readonly scene: Scene, private readonly onHit?: (outcome: HitOutcome) => void) {}
+  constructor(
+    private readonly scene: Scene,
+    private readonly events: GameEventBus,
+  ) {}
 
   fire(owner: TankEntity, target: Vector3): void {
     const origin = owner.cannon.getAbsolutePosition();
@@ -26,7 +31,12 @@ export class ShellSystem {
     const direction = horizontal.normalize();
     const velocity = calculateBallisticVelocity(origin, direction, distance, TUNING.targetHeight);
     if (!velocity) return;
-    this.shells.push(new Shell(this.scene, owner, origin, velocity, TUNING.penetration, 0, this.onHit));
+    this.events.emit("SHOT_FIRED", {
+      tank: owner.root.name,
+      muzzlePosition: toEventVector(origin),
+      direction: toEventVector(velocity.normalizeToNew()),
+    });
+    this.shells.push(new Shell(this.scene, this.events, owner, origin, velocity, TUNING.penetration, 0));
   }
 
   update(deltaSeconds: number): void {
@@ -50,7 +60,15 @@ class Shell {
   private readonly mesh;
   private age = 0;
   private firstSegment = true;
-  constructor(private readonly scene: Scene, private readonly owner: TankEntity, private position: Vector3, private velocity: Vector3, private penetration: number, private ricochets: number, private readonly onHit?: (outcome: HitOutcome) => void) {
+  constructor(
+    private readonly scene: Scene,
+    private readonly events: GameEventBus,
+    private readonly owner: TankEntity,
+    private position: Vector3,
+    private velocity: Vector3,
+    private penetration: number,
+    private ricochets: number,
+  ) {
     this.mesh = MeshBuilder.CreateSphere("shell", { diameter: 0.14 }, scene);
     this.mesh.position.copyFrom(position);
     this.mesh.isPickable = false;
@@ -84,10 +102,22 @@ class Shell {
           this.firstSegment = false;
           return this.withinBounds(next);
         }
-        this.onHit?.(result.outcome);
-        if (result?.outcome === HitOutcome.RICOCHET && result.shouldSpawnContinuation) {
+        this.events.emit("HIT", {
+          outcome: result.outcome,
+          facetId: facet.id,
+          point: toEventVector(pick.pickedPoint),
+          normal: toEventVector(normal),
+          impactAngleDegrees: result.impactAngleDegrees,
+        });
+        if (result.outcome === HitOutcome.RICOCHET) {
           const continuation = createRicochetContinuation({ shellDirection: this.velocity, facetNormal: normal, speed: this.velocity.length(), penetration: this.penetration, ricochetCount: this.ricochets });
-          if (continuation.shouldSpawn) {
+          this.events.emit("RICOCHET", {
+            point: toEventVector(pick.pickedPoint),
+            incoming: toEventVector(this.velocity.normalizeToNew()),
+            outgoing: toEventVector(continuation.direction),
+            retainedSpeed: continuation.speed,
+          });
+          if (result.shouldSpawnContinuation && continuation.shouldSpawn) {
             this.position = offsetRicochetOrigin(pick.pickedPoint, new Vector3(normal.x, normal.y, normal.z));
             this.velocity = new Vector3(
               continuation.direction.x,
@@ -115,4 +145,8 @@ class Shell {
   private withinBounds(position: Vector3): boolean {
     return this.age < TUNING.lifetime && Math.abs(position.x) < TUNING.arenaLimit && Math.abs(position.z) < TUNING.arenaLimit && position.y > -2;
   }
+}
+
+function toEventVector(vector: EventVector3): EventVector3 {
+  return Object.freeze({ x: vector.x, y: vector.y, z: vector.z });
 }
