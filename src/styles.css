@@ -93,3 +93,39 @@ main,
   opacity: 0.8;
   pointer-events: none;
 }
+
+.debug-overlay {
+  position: fixed;
+  top: 1rem;
+  right: 1rem;
+  width: min(31rem, calc(100vw - 2rem));
+  max-height: calc(100vh - 4rem);
+  overflow: hidden auto;
+  padding: 0.75rem 0.9rem;
+  border: 1px solid #76d9b677;
+  background: #101513e8;
+  color: #ccebdd;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  pointer-events: none;
+}
+
+.debug-overlay h2 {
+  margin: 0 0 0.4rem;
+  color: #76d9b6;
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+}
+
+.debug-overlay h2:not(:first-child) {
+  margin-top: 0.8rem;
+  padding-top: 0.65rem;
+  border-top: 1px solid #76d9b633;
+}
+
+.debug-overlay pre {
+  margin: 0;
+  white-space: pre-wrap;
+  font: inherit;
+  font-size: 0.68rem;
+  line-height: 1.45;
+}
