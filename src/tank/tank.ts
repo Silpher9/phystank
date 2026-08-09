@@ -17,6 +17,7 @@ export type TankFacet = Readonly<{
 export type TankEntity = Readonly<{
   root: TransformNode;
   turret: TransformNode;
+  cannon: AbstractMesh;
   profile: ArmorProfile;
   facets: Readonly<Record<ArmorFacetId, TankFacet>>;
 }>;
@@ -166,7 +167,7 @@ export function createTank(scene: Scene, options: CreateTankOptions): TankEntity
   cannon.material = armorMaterial;
   cannon.isPickable = false;
 
-  return { root, turret, profile, facets };
+  return { root, turret, cannon, profile, facets };
 }
 
 /** Returns armor data only when the picked mesh is one of the named plates. */
