@@ -11,6 +11,7 @@ import { Plane } from "@babylonjs/core/Maths/math.plane";
 import { TankController } from "./tank/controls";
 import { createTank, type TankEntity } from "./tank/tank";
 import { ShellSystem } from "./shells";
+import { GameEventBus } from "./core/events";
 import "./styles.css";
 
 /** Feel knobs: keep the fixed 3/4 view in one easy-to-tune place. */
@@ -39,8 +40,9 @@ const engine = new Engine(canvas, true, {
 const { scene, playerTank } = createScene(engine);
 document.querySelector(".loading")?.remove();
 
-const shellSystem = new ShellSystem(scene);
-const playerController = createPlayerController(scene, canvas, playerTank, () => {
+const gameEvents = new GameEventBus();
+const shellSystem = new ShellSystem(scene, gameEvents);
+const playerController = createPlayerController(scene, canvas, playerTank, gameEvents, () => {
   const target = playerController.aimPoint;
   if (target) shellSystem.fire(playerTank, target);
 });
@@ -103,8 +105,14 @@ function createScene(engine: Engine): { scene: Scene; playerTank: TankEntity } {
   return { scene, playerTank };
 }
 
-function createPlayerController(scene: Scene, canvas: HTMLCanvasElement, playerTank: TankEntity, onFire: () => void): TankController {
-  const controller = new TankController(playerTank);
+function createPlayerController(
+  scene: Scene,
+  canvas: HTMLCanvasElement,
+  playerTank: TankEntity,
+  events: GameEventBus,
+  onFire: () => void,
+): TankController {
+  const controller = new TankController(playerTank, events);
   const groundPlane = Plane.FromPositionAndNormal(Vector3.Zero(), Vector3.Up());
 
   canvas.addEventListener("pointermove", (event) => {

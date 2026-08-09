@@ -5,6 +5,7 @@ import { Vector3 } from "@babylonjs/core/Maths/math.vector";
 import { Scene } from "@babylonjs/core/scene";
 import { CONTROL_TUNING, moveTowardsAngle, TankController } from "./controls";
 import { createTank } from "./tank";
+import { GameEventBus, type GameEvents } from "../core/events";
 
 describe("turret turn limiting", () => {
   it("moves only by the permitted amount instead of snapping to the target", () => {
@@ -25,7 +26,7 @@ describe("turret turn limiting", () => {
       position: Vector3.Zero(),
       color: Color3.White(),
     });
-    const controller = new TankController(tank);
+    const controller = new TankController(tank, new GameEventBus());
     controller.setAimPoint(new Vector3(10, 0, 0));
     controller.update(1, { forward: 1, turn: 0 });
 
@@ -46,7 +47,7 @@ describe("turret turn limiting", () => {
       position: new Vector3(20, 0, 20),
       color: Color3.White(),
     });
-    const controller = new TankController(tank);
+    const controller = new TankController(tank, new GameEventBus());
     controller.update(0, { forward: 0, turn: 0 });
 
     const wallInnerEdge = 15.75;
@@ -54,6 +55,40 @@ describe("turret turn limiting", () => {
     expect(CONTROL_TUNING.ARENA_HALF_EXTENT + rotatedHullCornerRadius).toBeLessThanOrEqual(wallInnerEdge);
     expect(tank.root.position.x).toBe(CONTROL_TUNING.ARENA_HALF_EXTENT);
     expect(tank.root.position.z).toBe(CONTROL_TUNING.ARENA_HALF_EXTENT);
+
+    scene.dispose();
+    engine.dispose();
+  });
+
+  it("publishes physical drive state for suspension listeners", () => {
+    const engine = new NullEngine();
+    const scene = new Scene(engine);
+    const tank = createTank(scene, {
+      name: "drive-event-tank",
+      profile: "BRAWLER",
+      position: Vector3.Zero(),
+      color: Color3.White(),
+    });
+    const events = new GameEventBus();
+    const driveStates: GameEvents["DRIVE_STATE"][] = [];
+    events.on("DRIVE_STATE", (event) => driveStates.push(event));
+    const controller = new TankController(tank, events);
+
+    controller.update(0.5, { forward: 1, turn: -0.5 });
+    controller.update(0.5, { forward: 1, turn: 0 });
+
+    expect(driveStates).toEqual([
+      {
+        acceleration: CONTROL_TUNING.DRIVE_SPEED / 0.5,
+        turnRate: -0.5 * CONTROL_TUNING.HULL_TURN_SPEED,
+        speed: CONTROL_TUNING.DRIVE_SPEED,
+      },
+      {
+        acceleration: 0,
+        turnRate: 0,
+        speed: CONTROL_TUNING.DRIVE_SPEED,
+      },
+    ]);
 
     scene.dispose();
     engine.dispose();

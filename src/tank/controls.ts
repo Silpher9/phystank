@@ -1,4 +1,5 @@
 import { Vector3 } from "@babylonjs/core/Maths/math.vector";
+import type { GameEventBus } from "../core/events";
 import type { TankEntity } from "./tank";
 
 export const CONTROL_TUNING = {
@@ -16,8 +17,12 @@ export type DriveInput = Readonly<{ forward: number; turn: number }>;
 export class TankController {
   private reloadRemaining = 0;
   private targetPoint: Vector3 | null = null;
+  private previousSpeed = 0;
 
-  constructor(readonly tank: TankEntity) {}
+  constructor(
+    readonly tank: TankEntity,
+    private readonly events: GameEventBus,
+  ) {}
 
   setAimPoint(point: Vector3): void {
     this.targetPoint = point.clone();
@@ -27,8 +32,9 @@ export class TankController {
     const turnAmount = input.turn * CONTROL_TUNING.HULL_TURN_SPEED * deltaSeconds;
     this.tank.root.rotation.y += turnAmount;
 
-    const speed = input.forward >= 0 ? CONTROL_TUNING.DRIVE_SPEED : CONTROL_TUNING.REVERSE_SPEED;
-    const distance = input.forward * speed * deltaSeconds;
+    const speedLimit = input.forward >= 0 ? CONTROL_TUNING.DRIVE_SPEED : CONTROL_TUNING.REVERSE_SPEED;
+    const speed = input.forward * speedLimit;
+    const distance = speed * deltaSeconds;
     const forward = new Vector3(-Math.sin(this.tank.root.rotation.y), 0, -Math.cos(this.tank.root.rotation.y));
     this.tank.root.position.addInPlace(forward.scale(distance));
     this.tank.root.position.x = clamp(this.tank.root.position.x, -CONTROL_TUNING.ARENA_HALF_EXTENT, CONTROL_TUNING.ARENA_HALF_EXTENT);
@@ -49,6 +55,16 @@ export class TankController {
     }
 
     this.reloadRemaining = Math.max(0, this.reloadRemaining - deltaSeconds);
+
+    const acceleration = deltaSeconds > 0
+      ? (speed - this.previousSpeed) / deltaSeconds
+      : 0;
+    this.events.emit("DRIVE_STATE", {
+      acceleration,
+      turnRate: input.turn * CONTROL_TUNING.HULL_TURN_SPEED,
+      speed,
+    });
+    this.previousSpeed = speed;
   }
 
   beginReload(): boolean {
