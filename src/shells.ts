@@ -7,10 +7,19 @@ import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
 import { createRicochetContinuation, HitOutcome, resolveHit } from "./core/ballistics";
 import type { Vector3 as EventVector3 } from "./core/ballistics";
 import type { GameEventBus } from "./core/events";
+import { ARENA_SIZE, WALL_THICKNESS } from "./arena";
 import { getFacetForMesh, getFacetNormalFromPick, type TankEntity } from "./tank/tank";
 
 export const RICOCHET_EPSILON = 0.02;
-const TUNING = { speed: 45, gravity: 9.81, lifetime: 4, arenaLimit: 17, caliber: 75, penetration: 150, targetHeight: 1.2 };
+const TUNING = {
+  speed: 45,
+  gravity: 9.81,
+  lifetime: 4,
+  arenaLimit: ARENA_SIZE / 2 + WALL_THICKNESS,
+  caliber: 75,
+  penetration: 150,
+  targetHeight: 1.2,
+};
 
 export function offsetRicochetOrigin(hitPoint: Vector3, normal: Vector3): Vector3 {
   return hitPoint.add(normal.scale(RICOCHET_EPSILON));

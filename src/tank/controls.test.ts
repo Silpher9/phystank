@@ -6,6 +6,7 @@ import { Scene } from "@babylonjs/core/scene";
 import { CONTROL_TUNING, moveTowardsAngle, TankController } from "./controls";
 import { createTank } from "./tank";
 import { GameEventBus, type GameEvents } from "../core/events";
+import { ARENA_SIZE, WALL_THICKNESS } from "../arena";
 
 describe("turret turn limiting", () => {
   it("moves only by the permitted amount instead of snapping to the target", () => {
@@ -44,17 +45,36 @@ describe("turret turn limiting", () => {
     const tank = createTank(scene, {
       name: "bounds-test-tank",
       profile: "BRAWLER",
-      position: new Vector3(20, 0, 20),
+      position: new Vector3(100, 0, 100),
       color: Color3.White(),
     });
     const controller = new TankController(tank, new GameEventBus());
     controller.update(0, { forward: 0, turn: 0 });
-
-    const wallInnerEdge = 15.75;
-    const rotatedHullCornerRadius = 3.51;
-    expect(CONTROL_TUNING.ARENA_HALF_EXTENT + rotatedHullCornerRadius).toBeLessThanOrEqual(wallInnerEdge);
     expect(tank.root.position.x).toBe(CONTROL_TUNING.ARENA_HALF_EXTENT);
     expect(tank.root.position.z).toBe(CONTROL_TUNING.ARENA_HALF_EXTENT);
+
+    const hullFacets = Object.values(tank.facets).filter((facet) => facet.id !== "TURRET_FRONT");
+    let measuredRotatedRadius = 0;
+    tank.root.position.set(0, 0, 0);
+    for (let degrees = 0; degrees < 360; degrees += 0.5) {
+      tank.root.rotation.y = degrees * Math.PI / 180;
+      tank.root.computeWorldMatrix(true);
+      for (const facet of hullFacets) {
+        facet.mesh.computeWorldMatrix(true);
+        const bounds = facet.mesh.getBoundingInfo().boundingBox;
+        measuredRotatedRadius = Math.max(
+          measuredRotatedRadius,
+          Math.abs(bounds.minimumWorld.x),
+          Math.abs(bounds.maximumWorld.x),
+        );
+      }
+    }
+
+    const wallInnerEdge = ARENA_SIZE / 2 - WALL_THICKNESS / 2;
+    const furthestHullPoint = CONTROL_TUNING.ARENA_HALF_EXTENT + measuredRotatedRadius;
+    expect(ARENA_SIZE).toBe(96);
+    expect(furthestHullPoint).toBeLessThanOrEqual(wallInnerEdge);
+    expect(furthestHullPoint).toBeGreaterThan(wallInnerEdge - 0.25);
 
     scene.dispose();
     engine.dispose();

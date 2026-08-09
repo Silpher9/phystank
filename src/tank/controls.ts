@@ -1,6 +1,9 @@
 import { Vector3 } from "@babylonjs/core/Maths/math.vector";
 import type { GameEventBus } from "../core/events";
+import { ARENA_SIZE, WALL_THICKNESS } from "../arena";
 import type { TankEntity } from "./tank";
+
+const CONSERVATIVE_ROTATED_HULL_RADIUS = 3.51;
 
 export const CONTROL_TUNING = {
   DRIVE_SPEED: 7,
@@ -8,8 +11,8 @@ export const CONTROL_TUNING = {
   HULL_TURN_SPEED: 1.9,
   TURRET_TURN_SPEED: 1.15,
   RELOAD_DURATION_SECONDS: 2.2,
-  // 15.75 (wall inside) minus the tank's rotated corner radius.
-  ARENA_HALF_EXTENT: 12.2,
+  // Wall inside minus the tank's conservative rotated hull radius.
+  ARENA_HALF_EXTENT: ARENA_SIZE / 2 - WALL_THICKNESS / 2 - CONSERVATIVE_ROTATED_HULL_RADIUS,
 } as const;
 
 export type DriveInput = Readonly<{ forward: number; turn: number }>;
