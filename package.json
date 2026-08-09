@@ -4,12 +4,20 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest"
   },
   "devDependencies": {
     "@types/node": "^26.2.0",
+    "@webgpu/types": "^0.1.71",
     "typescript": "^5.7.3",
+    "vite": "^7.3.6",
     "vitest": "^3.0.8"
+  },
+  "dependencies": {
+    "@babylonjs/core": "^9.20.0"
   }
 }
