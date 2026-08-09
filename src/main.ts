@@ -1,4 +1,3 @@
-import { ArcRotateCamera } from "@babylonjs/core/Cameras/arcRotateCamera";
 import { Engine } from "@babylonjs/core/Engines/engine";
 import { DirectionalLight } from "@babylonjs/core/Lights/directionalLight";
 import { HemisphericLight } from "@babylonjs/core/Lights/hemisphericLight";
@@ -12,19 +11,9 @@ import { TankController } from "./tank/controls";
 import { createTank, type TankEntity } from "./tank/tank";
 import { ShellSystem } from "./shells";
 import { GameEventBus } from "./core/events";
+import { ARENA_SIZE, WALL_HEIGHT, WALL_THICKNESS } from "./arena";
+import { createPlayerCamera, followPlayer } from "./camera";
 import "./styles.css";
-
-/** Feel knobs: keep the fixed 3/4 view in one easy-to-tune place. */
-export const CAMERA_TUNING = {
-  alpha: -Math.PI / 4,
-  beta: Math.PI / 3.2,
-  radius: 56,
-  target: new Vector3(0, 0, 0),
-} as const;
-
-const ARENA_SIZE = 32;
-const WALL_THICKNESS = 0.5;
-const WALL_HEIGHT = 1;
 
 const canvas = document.querySelector<HTMLCanvasElement>("#game-canvas");
 
@@ -37,7 +26,7 @@ const engine = new Engine(canvas, true, {
   stencil: true,
 });
 
-const { scene, playerTank } = createScene(engine);
+const { scene, playerTank, camera } = createScene(engine);
 document.querySelector(".loading")?.remove();
 
 const gameEvents = new GameEventBus();
@@ -49,33 +38,22 @@ const playerController = createPlayerController(scene, canvas, playerTank, gameE
 engine.runRenderLoop(() => {
   const deltaSeconds = engine.getDeltaTime() / 1000;
   playerController.update(deltaSeconds, readDriveInput());
+  followPlayer(camera, playerTank.root.position);
   shellSystem.update(deltaSeconds);
   updateReloadHud(playerController);
   scene.render();
 });
 window.addEventListener("resize", () => engine.resize());
 
-function createScene(engine: Engine): { scene: Scene; playerTank: TankEntity } {
+function createScene(engine: Engine): {
+  scene: Scene;
+  playerTank: TankEntity;
+  camera: ReturnType<typeof createPlayerCamera>;
+} {
   const scene = new Scene(engine);
   scene.clearColor = Color4.FromHexString("#171b1aff");
 
-  const camera = new ArcRotateCamera(
-    "fixed-camera",
-    CAMERA_TUNING.alpha,
-    CAMERA_TUNING.beta,
-    CAMERA_TUNING.radius,
-    CAMERA_TUNING.target,
-    scene,
-  );
-  // Deliberately no attachControl: phase 0's camera is fixed for aim readability.
-  camera.lowerRadiusLimit = CAMERA_TUNING.radius;
-  camera.upperRadiusLimit = CAMERA_TUNING.radius;
-  camera.lowerBetaLimit = CAMERA_TUNING.beta;
-  camera.upperBetaLimit = CAMERA_TUNING.beta;
-  camera.lowerAlphaLimit = CAMERA_TUNING.alpha;
-  camera.upperAlphaLimit = CAMERA_TUNING.alpha;
-  camera.setTarget(CAMERA_TUNING.target);
-  scene.activeCamera = camera;
+  const camera = createPlayerCamera(scene);
 
   const sun = new DirectionalLight("angle-light", new Vector3(-0.55, -1, 0.35), scene);
   sun.position = new Vector3(12, 20, -10);
@@ -102,7 +80,8 @@ function createScene(engine: Engine): { scene: Scene; playerTank: TankEntity } {
     rotationY: -Math.PI * 0.78,
     color: Color3.FromHexString("#536d75"),
   });
-  return { scene, playerTank };
+  followPlayer(camera, playerTank.root.position);
+  return { scene, playerTank, camera };
 }
 
 function createPlayerController(

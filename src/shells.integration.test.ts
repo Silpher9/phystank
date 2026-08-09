@@ -32,4 +32,22 @@ describe("shell integration", () => {
     expect(hits[0].impactAngleDegrees).toBeGreaterThanOrEqual(0);
     scene.dispose(); engine.dispose();
   });
+
+  it("keeps shells active on the expanded arena's far half", () => {
+    const engine = new NullEngine();
+    const scene = new Scene(engine);
+    const events = new GameEventBus();
+    const hits: GameEvents["HIT"][] = [];
+    const shells = new ShellSystem(scene, events);
+    events.on("HIT", (event) => hits.push(event));
+    const player = createTank(scene, { name: "far-player", profile: "BRAWLER", position: new Vector3(24.5, 0, 2.5), rotationY: Math.PI / 8, color: Color3.White() });
+    const target = createTank(scene, { name: "far-target", profile: "ALLROUNDER", position: new Vector3(35.5, 0, -2.5), rotationY: -Math.PI * 0.78, color: Color3.Gray() });
+    scene.meshes.forEach((mesh) => mesh.computeWorldMatrix(true));
+
+    shells.fire(player, target.root.position.clone());
+    for (let frame = 0; frame < 240 && hits.length === 0; frame++) shells.update(1 / 60);
+
+    expect(hits.length).toBeGreaterThan(0);
+    scene.dispose(); engine.dispose();
+  });
 });
