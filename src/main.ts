@@ -140,7 +140,7 @@ function updateReloadHud(controller: TankController): void {
   const hud = document.querySelector<HTMLElement>("#reload-status");
   if (!hud) return;
   const progress = Math.round(controller.reloadProgress * 100);
-  hud.textContent = controller.isReloading ? `HERLADEN ${progress}%` : "KANON GEREED — spatie test herladen";
+  hud.textContent = controller.isReloading ? `HERLADEN ${progress}%` : "KANON GEREED — spatie = vuren";
 }
 
 function createArena(scene: Scene): void {
