@@ -15,6 +15,7 @@ import { HitFeedbackSystem } from "./vfx/hit-feedback";
 import { createRenderingStack } from "./vfx/rendering";
 import { DebugOverlaySystem } from "./debug/debug-overlay";
 import { ShotRecoilSystem } from "./tank/shot-recoil";
+import { HullPoseComposer } from "./tank/hull-pose";
 import "./styles.css";
 
 const canvas = document.querySelector<HTMLCanvasElement>("#game-canvas");
@@ -45,7 +46,10 @@ const hitFeedback = new HitFeedbackSystem(
   document.querySelector<HTMLElement>("#hit-status"),
 );
 const shellSystem = new ShellSystem(scene, gameEvents);
-const shotRecoil = new ShotRecoilSystem(gameEvents, [playerTank]);
+const playerHullPose = new HullPoseComposer(playerTank);
+const shotRecoil = new ShotRecoilSystem(gameEvents, [
+  { tank: playerTank, hullPose: playerHullPose },
+]);
 const playerController = createPlayerController(scene, canvas, playerTank, gameEvents, () => {
   const target = playerController.aimPoint;
   if (target) shellSystem.fire(playerTank, target);
@@ -54,6 +58,7 @@ engine.runRenderLoop(() => {
   const deltaSeconds = engine.getDeltaTime() / 1000;
   playerController.update(deltaSeconds, readDriveInput());
   shotRecoil.update(deltaSeconds);
+  playerHullPose.apply();
   followPlayer(camera, playerTank.root.position);
   shellSystem.update(deltaSeconds);
   hitFeedback.update(deltaSeconds);
