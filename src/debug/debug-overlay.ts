@@ -42,7 +42,7 @@ export class DebugOverlaySystem {
   private deflectionMarkers: Mesh[] = [];
   private latestShellId: string | null = null;
   private _enabled = false;
-  private _lastHitSummary = "Nog geen pantsertreffer";
+  private _lastHitSummary = "No armor hit yet";
 
   constructor(
     private readonly scene: Scene,
@@ -187,11 +187,11 @@ export class DebugOverlaySystem {
   private showHit(event: GameEvents["HIT"]): void {
     this._lastHitSummary = [
       `FACET        ${event.facetId}`,
-      `INSLAGHOEK  ${event.impactAngleDegrees.toFixed(1)}°`,
-      `PANTSER     ${event.nominalThickness.toFixed(0)} mm nominaal`,
-      `            ${event.effectiveThickness.toFixed(1)} mm effectief`,
-      `PENETRATIE  ${event.penetration.toFixed(1)} mm`,
-      `UITKOMST    ${event.outcome}`,
+      `IMPACT ANGLE ${event.impactAngleDegrees.toFixed(1)}°`,
+      `ARMOR        ${event.nominalThickness.toFixed(0)} mm nominal`,
+      `             ${event.effectiveThickness.toFixed(1)} mm effective`,
+      `PENETRATION  ${event.penetration.toFixed(1)} mm`,
+      `OUTCOME      ${event.outcome}`,
     ].join("\n");
     if (this.elements.hit) this.elements.hit.textContent = this._lastHitSummary;
   }

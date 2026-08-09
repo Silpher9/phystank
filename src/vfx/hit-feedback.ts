@@ -13,21 +13,21 @@ type DebrisMotion = "INWARD" | "DROP" | "OUTWARD" | "NONE";
 
 export const HIT_EFFECT_PROFILES = {
   [HitOutcome.PENETRATION]: {
-    hud: "DOORSLAG",
+    hud: "PENETRATED",
     mark: true,
     debris: "INWARD" as DebrisMotion,
     debrisCount: 7,
     dustCount: 2,
   },
   [HitOutcome.RICOCHET]: {
-    hud: "AFGEKETST",
+    hud: "RICOCHET",
     mark: false,
     debris: "NONE" as DebrisMotion,
     debrisCount: 0,
     dustCount: 2,
   },
   [HitOutcome.SHATTER]: {
-    hud: "GEEN DOORSLAG",
+    hud: "SHATTERED",
     mark: false,
     debris: "DROP" as DebrisMotion,
     debrisCount: 8,
@@ -139,7 +139,7 @@ export class HitFeedbackSystem {
     this.spawnFlash(position, direction);
     this.spawnDust(new Vector3(position.x, 0.12, position.z), direction, 5);
     this.addShake(0.11, 0.09);
-    this.setCue("VUUR", "shot");
+    this.setCue("FIRE", "shot");
   }
 
   private onArmorHit(event: GameEvents["HIT"]): void {
@@ -168,14 +168,14 @@ export class HitFeedbackSystem {
     if (event.outcome === ObjectHitOutcome.DESTROYED) {
       this.spawnDebris(point, normal, "OUTWARD", 10, Color3.FromHexString("#6f4d2f"));
       this.spawnDust(point, normal, 6);
-      this.setCue("DEKKING VERNIETIGD", "destroyed");
+      this.setCue("COVER DESTROYED", "destroyed");
     } else if (event.outcome === ObjectHitOutcome.STOPPED) {
       this.spawnDebris(point, normal, "DROP", 5, Color3.FromHexString("#5d5b52"));
       this.spawnDust(point, normal, 5);
-      this.setCue("HARDE INSLAG", "shatter");
+      this.setCue("HARD IMPACT", "shatter");
     } else {
       this.spawnDust(point, normal, 2);
-      this.setCue("AFGEKETST", "ricochet");
+      this.setCue("RICOCHET", "ricochet");
     }
     this.addShake(0.035, 0.06);
   }
@@ -184,7 +184,7 @@ export class HitFeedbackSystem {
     const point = toVector3(event.point);
     const outgoing = toVector3(event.outgoing).normalize();
     this.spawnSparks(point, outgoing, 10);
-    this.setCue("AFGEKETST", "ricochet");
+    this.setCue("RICOCHET", "ricochet");
   }
 
   private spawnFlash(point: Vector3, direction: Vector3): void {

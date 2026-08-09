@@ -1,24 +1,24 @@
 <!doctype html>
-<html lang="nl">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#171b1a" />
-    <title>phystank — Schietbaan</title>
+    <title>phystank — Firing Range</title>
   </head>
   <body>
     <main>
-      <canvas id="game-canvas" aria-label="Phystank schietbaan"></canvas>
-      <p id="reload-status" class="hud">KANON GEREED — spatie = vuren</p>
+      <canvas id="game-canvas" aria-label="Phystank firing range"></canvas>
+      <p id="reload-status" class="hud">CANNON READY — Space = fire</p>
       <p id="hit-status" class="hit-status" aria-live="polite"></p>
       <aside id="debug-overlay" class="debug-overlay" hidden>
-        <h2>DEBUG · LIVE PANTSER</h2>
+        <h2>DEBUG · LIVE ARMOR</h2>
         <pre id="debug-facets"></pre>
-        <h2>LAATSTE TREFFER</h2>
-        <pre id="debug-hit">Nog geen pantsertreffer</pre>
+        <h2>LAST HIT</h2>
+        <pre id="debug-hit">No armor hit yet</pre>
       </aside>
-      <p class="controls-hint">W/S rijden · A/D draaien · muis richten · spatie vuren · F3 debug</p>
-      <p class="loading">Laden…</p>
+      <p class="controls-hint">W/S drive · A/D turn · mouse aim · Space fire · F3 debug</p>
+      <p class="loading">Loading…</p>
     </main>
     <script type="module" src="/src/main.ts"></script>
   </body>
