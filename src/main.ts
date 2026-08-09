@@ -19,7 +19,7 @@ import "./styles.css";
 const canvas = document.querySelector<HTMLCanvasElement>("#game-canvas");
 
 if (!canvas) {
-  throw new Error("Game canvas ontbreekt");
+  throw new Error("Game canvas is missing");
 }
 
 const engine = new Engine(canvas, true, {
@@ -149,5 +149,5 @@ function updateReloadHud(controller: TankController): void {
   const hud = document.querySelector<HTMLElement>("#reload-status");
   if (!hud) return;
   const progress = Math.round(controller.reloadProgress * 100);
-  hud.textContent = controller.isReloading ? `HERLADEN ${progress}%` : "KANON GEREED — spatie = vuren";
+  hud.textContent = controller.isReloading ? `RELOADING ${progress}%` : "CANNON READY — Space = fire";
 }

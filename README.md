@@ -1,31 +1,31 @@
 # phystank
 
-Een kleine top-down 3/4 tankgame in Babylon.js, geïnspireerd op het pantsermodel
-van *Men of War: Assault Squad*.
+A small top-down 3/4-view tank game in Babylon.js, inspired by the armor model
+in *Men of War: Assault Squad*.
 
-## De kern
+## Core concept
 
-Tanks zijn niet "sterk" of "zwak" — hun **zijden** zijn dat. Elke plaat heeft een
-eigen dikte en helling, en of een granaat doorslaat hangt af van de hoek waarin
-hij inslaat:
+Tanks are not simply "strong" or "weak" — their **facets** are. Each armor plate
+has its own thickness and slope, and whether a shell penetrates depends on its
+impact angle:
 
-- **PENETRATION** — doorslag, schade
-- **RICOCHET** — te scherpe hoek, de granaat ketst af en vliegt zichtbaar door
-- **SHATTER** — de plaat is simpelweg te dik
+- **PENETRATION** — the shell penetrates and deals damage
+- **RICOCHET** — the impact is too oblique; the shell deflects and visibly continues
+- **SHATTER** — the plate is simply too thick
 
-Daardoor gaat het spel over **positionering**: je sterke zijde naar de vijand
-draaien en zijn zwakke zijde zien te vinden.
+This makes the game about **positioning**: present your strongest armor while
+trying to expose an opponent's weak side.
 
-## Opzet
+## Architecture
 
-- `src/core/` — engine-onafhankelijke spelkern (geen Babylon-imports, unit-getest)
-- De rest van de game bouwt daarop
+- `src/core/` — engine-independent game logic (no Babylon imports, unit tested)
+- The rest of the game builds on that foundation
 
-Die scheiding is bewust: de ballistiek is de feel van het spel en moet
-tuneable en testbaar zijn zonder de game te starten.
+This separation is deliberate: ballistics define the feel of the game and must
+remain tunable and testable without launching it.
 
 ## Status
 
-Fase 0 — schietbaan-MVP. Zie de
-[issues](https://github.com/Silpher9/phystank/issues) en de milestone
-*Fase 0 — Schietbaan MVP*.
+Phase 0 — firing-range MVP. See the
+[issues](https://github.com/Silpher9/phystank/issues) and the
+*Phase 0 — Firing Range MVP* milestone.

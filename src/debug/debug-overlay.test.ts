@@ -5,6 +5,7 @@ import { Scene } from "@babylonjs/core/scene";
 import { describe, expect, it } from "vitest";
 import { HitOutcome } from "../core/ballistics";
 import { GameEventBus } from "../core/events";
+import { getHitTarget } from "../hit-targets";
 import { createTank } from "../tank/tank";
 import { DebugOverlaySystem, readFacetPose } from "./debug-overlay";
 
@@ -34,7 +35,7 @@ describe("debug overlay", () => {
     const scene = new Scene(engine);
     const events = new GameEventBus();
     const tank = createTank(scene, {
-      name: "debug-event-tank",
+      name: "event-tank",
       profile: "BRAWLER",
       position: Vector3.Zero(),
       color: Color3.White(),
@@ -76,12 +77,15 @@ describe("debug overlay", () => {
 
     expect(overlay.lastPathPointCount).toBe(3);
     expect(overlay.deflectionCount).toBe(1);
-    expect(overlay.lastHitSummary).toContain("160 mm nominaal");
-    expect(overlay.lastHitSummary).toContain("618.2 mm effectief");
+    expect(overlay.lastHitSummary).toContain("160 mm nominal");
+    expect(overlay.lastHitSummary).toContain("618.2 mm effective");
     expect(overlay.lastHitSummary).toContain("RICOCHET");
-    const normal = scene.getMeshByName("debug-normal-debug-event-tank-FRONT");
+    const normal = scene.getMeshByName("debug-normal-event-tank-FRONT");
     const path = scene.getMeshByName("debug-last-shell-path");
     const deflection = scene.getMeshByName("debug-deflection");
+    const debugMeshes = scene.meshes.filter(({ name }) => name.startsWith("debug-"));
+    expect(debugMeshes.length).toBeGreaterThan(0);
+    expect(debugMeshes.every((mesh) => getHitTarget(mesh) === undefined)).toBe(true);
     expect(normal?.isEnabled()).toBe(false);
     expect(path?.isEnabled()).toBe(false);
     expect(deflection?.isEnabled()).toBe(false);
