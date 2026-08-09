@@ -7,7 +7,9 @@ import { Color3, Color4 } from "@babylonjs/core/Maths/math.color";
 import { Vector3 } from "@babylonjs/core/Maths/math.vector";
 import { MeshBuilder } from "@babylonjs/core/Meshes/meshBuilder";
 import { Scene } from "@babylonjs/core/scene";
-import { createTank } from "./tank/tank";
+import { Plane } from "@babylonjs/core/Maths/math.plane";
+import { TankController } from "./tank/controls";
+import { createTank, type TankEntity } from "./tank/tank";
 import "./styles.css";
 
 /** Feel knobs: keep the fixed 3/4 view in one easy-to-tune place. */
@@ -33,13 +35,18 @@ const engine = new Engine(canvas, true, {
   stencil: true,
 });
 
-const scene = createScene(engine, canvas);
+const { scene, playerTank } = createScene(engine);
 document.querySelector(".loading")?.remove();
 
-engine.runRenderLoop(() => scene.render());
+const playerController = createPlayerController(scene, canvas, playerTank);
+engine.runRenderLoop(() => {
+  playerController.update(engine.getDeltaTime() / 1000, readDriveInput());
+  updateReloadHud(playerController);
+  scene.render();
+});
 window.addEventListener("resize", () => engine.resize());
 
-function createScene(engine: Engine, canvas: HTMLCanvasElement): Scene {
+function createScene(engine: Engine): { scene: Scene; playerTank: TankEntity } {
   const scene = new Scene(engine);
   scene.clearColor = Color4.FromHexString("#171b1aff");
 
@@ -72,8 +79,8 @@ function createScene(engine: Engine, canvas: HTMLCanvasElement): Scene {
   fill.groundColor = Color3.FromHexString("#1b211d");
 
   createArena(scene);
-  createTank(scene, {
-    name: "brawler-demo",
+  const playerTank = createTank(scene, {
+    name: "player-tank",
     profile: "BRAWLER",
     position: new Vector3(-5.5, 0, 2.5),
     rotationY: Math.PI / 8,
@@ -86,7 +93,47 @@ function createScene(engine: Engine, canvas: HTMLCanvasElement): Scene {
     rotationY: -Math.PI * 0.78,
     color: Color3.FromHexString("#536d75"),
   });
-  return scene;
+  return { scene, playerTank };
+}
+
+function createPlayerController(scene: Scene, canvas: HTMLCanvasElement, playerTank: TankEntity): TankController {
+  const controller = new TankController(playerTank);
+  const groundPlane = Plane.FromPositionAndNormal(Vector3.Zero(), Vector3.Up());
+
+  canvas.addEventListener("pointermove", (event) => {
+    const bounds = canvas.getBoundingClientRect();
+    const ray = scene.createPickingRay(event.clientX - bounds.left, event.clientY - bounds.top, null, scene.activeCamera);
+    const distance = ray.intersectsPlane(groundPlane);
+    if (distance !== null) controller.setAimPoint(ray.origin.add(ray.direction.scale(distance)));
+  });
+  window.addEventListener("keydown", (event) => {
+    if (event.code === "Space") {
+      event.preventDefault();
+      controller.beginReload();
+    }
+  });
+  return controller;
+}
+
+function readDriveInput(): { forward: number; turn: number } {
+  const forward = Number(isKeyDown("KeyW")) - Number(isKeyDown("KeyS"));
+  const turn = Number(isKeyDown("KeyA")) - Number(isKeyDown("KeyD"));
+  return { forward, turn };
+}
+
+const heldKeys = new Set<string>();
+window.addEventListener("keydown", (event) => heldKeys.add(event.code));
+window.addEventListener("keyup", (event) => heldKeys.delete(event.code));
+
+function isKeyDown(code: string): boolean {
+  return heldKeys.has(code);
+}
+
+function updateReloadHud(controller: TankController): void {
+  const hud = document.querySelector<HTMLElement>("#reload-status");
+  if (!hud) return;
+  const progress = Math.round(controller.reloadProgress * 100);
+  hud.textContent = controller.isReloading ? `HERLADEN ${progress}%` : "KANON GEREED — spatie test herladen";
 }
 
 function createArena(scene: Scene): void {

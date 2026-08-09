@@ -33,3 +33,17 @@ main,
   font-size: 0.85rem;
   pointer-events: none;
 }
+
+.hud {
+  position: fixed;
+  top: 1rem;
+  left: 1rem;
+  margin: 0;
+  padding: 0.45rem 0.65rem;
+  border: 1px solid #d5dbce77;
+  background: #171b1acc;
+  color: #f2f6eb;
+  font-size: 0.8rem;
+  letter-spacing: 0.05em;
+  pointer-events: none;
+}
