@@ -10,6 +10,7 @@ import { Scene } from "@babylonjs/core/scene";
 import { Plane } from "@babylonjs/core/Maths/math.plane";
 import { TankController } from "./tank/controls";
 import { createTank, type TankEntity } from "./tank/tank";
+import { ShellSystem } from "./shells";
 import "./styles.css";
 
 /** Feel knobs: keep the fixed 3/4 view in one easy-to-tune place. */
@@ -38,9 +39,15 @@ const engine = new Engine(canvas, true, {
 const { scene, playerTank } = createScene(engine);
 document.querySelector(".loading")?.remove();
 
-const playerController = createPlayerController(scene, canvas, playerTank);
+const shellSystem = new ShellSystem(scene);
+const playerController = createPlayerController(scene, canvas, playerTank, () => {
+  const target = playerController.aimPoint;
+  if (target) shellSystem.fire(playerTank, target);
+});
 engine.runRenderLoop(() => {
-  playerController.update(engine.getDeltaTime() / 1000, readDriveInput());
+  const deltaSeconds = engine.getDeltaTime() / 1000;
+  playerController.update(deltaSeconds, readDriveInput());
+  shellSystem.update(deltaSeconds);
   updateReloadHud(playerController);
   scene.render();
 });
@@ -96,7 +103,7 @@ function createScene(engine: Engine): { scene: Scene; playerTank: TankEntity } {
   return { scene, playerTank };
 }
 
-function createPlayerController(scene: Scene, canvas: HTMLCanvasElement, playerTank: TankEntity): TankController {
+function createPlayerController(scene: Scene, canvas: HTMLCanvasElement, playerTank: TankEntity, onFire: () => void): TankController {
   const controller = new TankController(playerTank);
   const groundPlane = Plane.FromPositionAndNormal(Vector3.Zero(), Vector3.Up());
 
@@ -109,7 +116,7 @@ function createPlayerController(scene: Scene, canvas: HTMLCanvasElement, playerT
   window.addEventListener("keydown", (event) => {
     if (event.code === "Space") {
       event.preventDefault();
-      controller.beginReload();
+      if (controller.beginReload()) onFire();
     }
   });
   return controller;

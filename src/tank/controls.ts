@@ -64,6 +64,10 @@ export class TankController {
   get isReloading(): boolean {
     return this.reloadRemaining > 0;
   }
+
+  get aimPoint(): Vector3 | null {
+    return this.targetPoint?.clone() ?? null;
+  }
 }
 
 export function moveTowardsAngle(current: number, target: number, maxDelta: number): number {
