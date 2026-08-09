@@ -16,7 +16,7 @@ export function offsetRicochetOrigin(hitPoint: Vector3, normal: Vector3): Vector
 
 export class ShellSystem {
   private readonly shells: Shell[] = [];
-  constructor(private readonly scene: Scene) {}
+  constructor(private readonly scene: Scene, private readonly onHit?: (outcome: HitOutcome) => void) {}
 
   fire(owner: TankEntity, target: Vector3): void {
     const origin = owner.cannon.getAbsolutePosition();
@@ -26,7 +26,7 @@ export class ShellSystem {
     const direction = horizontal.normalize();
     const velocity = calculateBallisticVelocity(origin, direction, distance, TUNING.targetHeight);
     if (!velocity) return;
-    this.shells.push(new Shell(this.scene, owner, origin, velocity, TUNING.penetration, 0));
+    this.shells.push(new Shell(this.scene, owner, origin, velocity, TUNING.penetration, 0, this.onHit));
   }
 
   update(deltaSeconds: number): void {
@@ -50,7 +50,7 @@ class Shell {
   private readonly mesh;
   private age = 0;
   private firstSegment = true;
-  constructor(private readonly scene: Scene, private readonly owner: TankEntity, private position: Vector3, private velocity: Vector3, private penetration: number, private ricochets: number) {
+  constructor(private readonly scene: Scene, private readonly owner: TankEntity, private position: Vector3, private velocity: Vector3, private penetration: number, private ricochets: number, private readonly onHit?: (outcome: HitOutcome) => void) {
     this.mesh = MeshBuilder.CreateSphere("shell", { diameter: 0.14 }, scene);
     this.mesh.position.copyFrom(position);
     this.mesh.isPickable = false;
@@ -76,6 +76,13 @@ class Shell {
       const normal = getFacetNormalFromPick(pick);
       if (facet && normal) {
         const result = resolveHit({ shellDirection: this.velocity, facetNormal: normal, armorThickness: facet.thickness, shellCaliber: TUNING.caliber, penetration: this.penetration, ricochetCount: this.ricochets });
+        if (result === null) {
+          this.position = pick.pickedPoint.add(this.velocity.clone().normalize().scale(RICOCHET_EPSILON));
+          this.mesh.position.copyFrom(this.position);
+          this.firstSegment = false;
+          return true;
+        }
+        this.onHit?.(result.outcome);
         if (result?.outcome === HitOutcome.RICOCHET && result.shouldSpawnContinuation) {
           const continuation = createRicochetContinuation({ shellDirection: this.velocity, facetNormal: normal, speed: this.velocity.length(), penetration: this.penetration, ricochetCount: this.ricochets });
           if (continuation.shouldSpawn) {
