@@ -30,6 +30,66 @@ export type CreateTankOptions = Readonly<{
 
 const FACET_BY_MESH = new WeakMap<AbstractMesh, TankFacet>();
 
+type PlateLayout = Readonly<{
+  width: number;
+  height: number;
+  depth: number;
+  position: Readonly<{ x: number; y: number; z: number }>;
+  slopeDegrees: number;
+}>;
+
+/**
+ * Shared geometry data. Neighboring hull plates intentionally overlap: a
+ * grazing shell must never find a non-pickable seam between armor facets.
+ */
+export const HULL_PLATE_LAYOUT = {
+  FRONT: {
+    width: 4.4,
+    height: 1.5,
+    depth: 0.3,
+    position: { x: 0, y: 1.3, z: -2.25 },
+    slopeDegrees: 20,
+  },
+  LEFT_SIDE: {
+    width: 0.3,
+    height: 1.45,
+    depth: 4.1,
+    position: { x: -2.15, y: 1.05, z: 0 },
+    slopeDegrees: 0,
+  },
+  RIGHT_SIDE: {
+    width: 0.3,
+    height: 1.45,
+    depth: 4.1,
+    position: { x: 2.15, y: 1.05, z: 0 },
+    slopeDegrees: 0,
+  },
+  REAR: {
+    width: 4.4,
+    height: 1.45,
+    depth: 0.3,
+    position: { x: 0, y: 1.05, z: 2.15 },
+    slopeDegrees: 0,
+  },
+  ROOF: {
+    width: 4.1,
+    height: 0.25,
+    depth: 4.1,
+    position: { x: 0, y: 1.78, z: 0.05 },
+    slopeDegrees: 0,
+  },
+} as const satisfies Readonly<
+  Record<Exclude<ArmorFacetId, "TURRET_FRONT">, PlateLayout>
+>;
+
+const TURRET_FRONT_LAYOUT = {
+  width: 2.4,
+  height: 0.8,
+  depth: 0.25,
+  position: { x: 0, y: 2.25, z: -0.95 },
+  slopeDegrees: 14,
+} as const satisfies PlateLayout;
+
 /**
  * Creates a deliberately simple tank whose armor plates are actual, named
  * meshes. A future raycast can read a picked mesh's geometry normal directly.
@@ -57,32 +117,32 @@ export function createTank(scene: Scene, options: CreateTankOptions): TankEntity
     FRONT: registerFacet(
       "FRONT",
       profile,
-      createPlate(`${options.name}-front`, { width: 4.4, height: 1.5, depth: 0.3 }, new Vector3(0, 1.3, -2.25), 20, root, armorMaterial, scene),
+      createPlate(`${options.name}-front`, HULL_PLATE_LAYOUT.FRONT, root, armorMaterial, scene),
     ),
     LEFT_SIDE: registerFacet(
       "LEFT_SIDE",
       profile,
-      createPlate(`${options.name}-left-side`, { width: 0.3, height: 1.3, depth: 4.1 }, new Vector3(-2.15, 1.05, 0), 0, root, armorMaterial, scene),
+      createPlate(`${options.name}-left-side`, HULL_PLATE_LAYOUT.LEFT_SIDE, root, armorMaterial, scene),
     ),
     RIGHT_SIDE: registerFacet(
       "RIGHT_SIDE",
       profile,
-      createPlate(`${options.name}-right-side`, { width: 0.3, height: 1.3, depth: 4.1 }, new Vector3(2.15, 1.05, 0), 0, root, armorMaterial, scene),
+      createPlate(`${options.name}-right-side`, HULL_PLATE_LAYOUT.RIGHT_SIDE, root, armorMaterial, scene),
     ),
     REAR: registerFacet(
       "REAR",
       profile,
-      createPlate(`${options.name}-rear`, { width: 4.4, height: 1.3, depth: 0.3 }, new Vector3(0, 1.05, 2.15), 0, root, armorMaterial, scene),
+      createPlate(`${options.name}-rear`, HULL_PLATE_LAYOUT.REAR, root, armorMaterial, scene),
     ),
     TURRET_FRONT: registerFacet(
       "TURRET_FRONT",
       profile,
-      createPlate(`${options.name}-turret-front`, { width: 2.4, height: 0.8, depth: 0.25 }, new Vector3(0, 2.25, -0.95), 14, root, armorMaterial, scene),
+      createPlate(`${options.name}-turret-front`, TURRET_FRONT_LAYOUT, root, armorMaterial, scene),
     ),
     ROOF: registerFacet(
       "ROOF",
       profile,
-      createPlate(`${options.name}-roof`, { width: 3.95, height: 0.2, depth: 3.85 }, new Vector3(0, 1.83, 0.05), 0, root, armorMaterial, scene),
+      createPlate(`${options.name}-roof`, HULL_PLATE_LAYOUT.ROOF, root, armorMaterial, scene),
     ),
   } satisfies Record<ArmorFacetId, TankFacet>;
 
@@ -117,23 +177,29 @@ export function getFacetForMesh(mesh: AbstractMesh | null | undefined): TankFace
 export function getFacetNormalFromPick(pick: PickingInfo): Vector3 | null {
   if (!getFacetForMesh(pick.pickedMesh) || !pick.hit) return null;
 
-  const normal = pick.getNormal(true);
-  return normal?.normalize() ?? null;
+  // Babylon flips a picked normal toward the ray. Restore the plate's outward
+  // geometric orientation so resolveHit can reject inside-out contacts.
+  const normal = pick.getNormal(true, false);
+  const hitPoint = pick.pickedPoint;
+  const mesh = pick.pickedMesh;
+  if (!normal || !hitPoint || !mesh) return null;
+
+  const outward = hitPoint.subtract(mesh.getBoundingInfo().boundingBox.centerWorld);
+  if (Vector3.Dot(normal, outward) < 0) normal.negateInPlace();
+  return normal.normalize();
 }
 
 function createPlate(
   name: string,
-  dimensions: { width: number; height: number; depth: number },
-  position: Vector3,
-  slopeDegrees: number,
+  layout: PlateLayout,
   parent: TransformNode,
   material: StandardMaterial,
   scene: Scene,
 ): AbstractMesh {
-  const plate = MeshBuilder.CreateBox(name, dimensions, scene);
+  const plate = MeshBuilder.CreateBox(name, layout, scene);
   plate.parent = parent;
-  plate.position.copyFrom(position);
-  plate.rotation.x = degreesToRadians(slopeDegrees);
+  plate.position.set(layout.position.x, layout.position.y, layout.position.z);
+  plate.rotation.x = degreesToRadians(layout.slopeDegrees);
   plate.material = material;
   return plate;
 }
