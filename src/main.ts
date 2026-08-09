@@ -11,6 +11,8 @@ import { ShellSystem } from "./shells";
 import { GameEventBus } from "./core/events";
 import { createArena } from "./arena-scene";
 import { createPlayerCamera, followPlayer } from "./camera";
+import { HitFeedbackSystem } from "./vfx/hit-feedback";
+import { createRenderingStack } from "./vfx/rendering";
 import "./styles.css";
 
 const canvas = document.querySelector<HTMLCanvasElement>("#game-canvas");
@@ -26,8 +28,15 @@ const engine = new Engine(canvas, true, {
 
 const { scene, playerTank, camera } = createScene(engine);
 document.querySelector(".loading")?.remove();
+createRenderingStack(scene, camera);
 
 const gameEvents = new GameEventBus();
+const hitFeedback = new HitFeedbackSystem(
+  scene,
+  camera,
+  gameEvents,
+  document.querySelector<HTMLElement>("#hit-status"),
+);
 const shellSystem = new ShellSystem(scene, gameEvents);
 const playerController = createPlayerController(scene, canvas, playerTank, gameEvents, () => {
   const target = playerController.aimPoint;
@@ -38,6 +47,7 @@ engine.runRenderLoop(() => {
   playerController.update(deltaSeconds, readDriveInput());
   followPlayer(camera, playerTank.root.position);
   shellSystem.update(deltaSeconds);
+  hitFeedback.update(deltaSeconds);
   updateReloadHud(playerController);
   scene.render();
 });

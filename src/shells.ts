@@ -28,25 +28,28 @@ export function offsetRicochetOrigin(hitPoint: Vector3, normal: Vector3): Vector
 
 export class ShellSystem {
   private readonly shells: Shell[] = [];
+  private nextShellId = 1;
   constructor(
     private readonly scene: Scene,
     private readonly events: GameEventBus,
   ) {}
 
   fire(owner: TankEntity, target: Vector3): void {
-    const origin = owner.cannon.getAbsolutePosition();
+    const origin = owner.muzzle.getAbsolutePosition();
     const horizontal = target.subtract(origin); horizontal.y = 0;
     if (horizontal.lengthSquared() < 0.01) return;
     const distance = horizontal.length();
     const direction = horizontal.normalize();
     const velocity = calculateBallisticVelocity(origin, direction, distance, TUNING.targetHeight);
     if (!velocity) return;
+    const shellId = `shell-${this.nextShellId++}`;
     this.events.emit("SHOT_FIRED", {
+      shellId,
       tank: owner.root.name,
       muzzlePosition: toEventVector(origin),
       direction: toEventVector(velocity.normalizeToNew()),
     });
-    this.shells.push(new Shell(this.scene, this.events, owner, origin, velocity, TUNING.penetration, 0));
+    this.shells.push(new Shell(shellId, this.scene, this.events, owner, origin, velocity, TUNING.penetration, 0));
   }
 
   update(deltaSeconds: number): void {
@@ -71,6 +74,7 @@ class Shell {
   private age = 0;
   private firstSegment = true;
   constructor(
+    private readonly id: string,
     private readonly scene: Scene,
     private readonly events: GameEventBus,
     private readonly owner: TankEntity,
@@ -115,11 +119,12 @@ class Shell {
         if (result.action === "IGNORE") {
           // An inside-out facet contact is not a hit. Finish this frame's full
           // segment instead of inching through armor one epsilon at a time.
-          this.position = next;
-          this.mesh.position.copyFrom(next);
+          this.moveTo(next);
           this.firstSegment = false;
-          return this.withinBounds(next);
+          return this.continueWithinBounds();
         }
+
+        this.moveTo(pick.pickedPoint);
 
         if (result.armorHit) this.events.emit("HIT", {
           outcome: result.armorHit.outcome,
@@ -141,10 +146,9 @@ class Shell {
 
         if (result.action === "PASS_THROUGH") {
           if (result.destroyTarget) pick.pickedMesh?.dispose();
-          this.position = pick.pickedPoint.add(incoming.scale(RICOCHET_EPSILON));
           this.velocity = incoming.scale(result.retainedSpeed ?? this.velocity.length());
           this.penetration = result.retainedPenetration ?? this.penetration;
-          this.mesh.position.copyFrom(this.position);
+          this.moveTo(pick.pickedPoint.add(incoming.scale(RICOCHET_EPSILON)));
           this.firstSegment = false;
           return true;
         }
@@ -158,7 +162,6 @@ class Shell {
             retainedSpeed: continuation.speed,
           });
           if (continuation.shouldSpawn) {
-            this.position = offsetRicochetOrigin(pick.pickedPoint, new Vector3(normal.x, normal.y, normal.z));
             this.velocity = new Vector3(
               continuation.direction.x,
               continuation.direction.y,
@@ -166,7 +169,7 @@ class Shell {
             ).scale(continuation.speed);
             this.penetration = continuation.penetration;
             this.ricochets = continuation.ricochetCount;
-            this.mesh.position.copyFrom(this.position);
+            this.moveTo(offsetRicochetOrigin(pick.pickedPoint, new Vector3(normal.x, normal.y, normal.z)));
             this.firstSegment = false;
             return true;
           }
@@ -174,16 +177,32 @@ class Shell {
       }
       return this.dispose();
     }
-    this.position = next;
+    this.moveTo(next);
     this.firstSegment = false;
-    this.mesh.position.copyFrom(next);
-    return this.withinBounds(next);
+    return this.continueWithinBounds();
   }
 
-  private dispose(): false { this.mesh.dispose(); return false; }
+  private moveTo(position: Vector3): void {
+    this.position = position;
+    this.mesh.position.copyFrom(position);
+    this.events.emit("SHELL_MOVED", {
+      shellId: this.id,
+      position: toEventVector(position),
+    });
+  }
 
-  private withinBounds(position: Vector3): boolean {
-    return this.age < TUNING.lifetime && Math.abs(position.x) < TUNING.arenaLimit && Math.abs(position.z) < TUNING.arenaLimit && position.y > -2;
+  private dispose(): false {
+    this.events.emit("SHELL_DESPAWNED", {
+      shellId: this.id,
+      position: toEventVector(this.position),
+    });
+    this.mesh.dispose();
+    return false;
+  }
+
+  private continueWithinBounds(): boolean {
+    const withinBounds = this.age < TUNING.lifetime && Math.abs(this.position.x) < TUNING.arenaLimit && Math.abs(this.position.z) < TUNING.arenaLimit && this.position.y > -2;
+    return withinBounds || this.dispose();
   }
 }
 

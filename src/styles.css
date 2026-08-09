@@ -48,6 +48,41 @@ main,
   pointer-events: none;
 }
 
+.hit-status {
+  position: fixed;
+  top: 3.9rem;
+  left: 1rem;
+  margin: 0;
+  padding: 0.35rem 0.55rem;
+  border-left: 2px solid #756d5c;
+  background: #171b1ab8;
+  color: #d6d2c5;
+  font-size: 0.72rem;
+  font-weight: 650;
+  letter-spacing: 0.075em;
+  opacity: 0;
+  transform: translateX(-0.3rem);
+  transition: opacity 90ms linear, transform 90ms linear;
+  pointer-events: none;
+}
+
+.hit-status.visible {
+  opacity: 0.9;
+  transform: translateX(0);
+}
+
+.hit-status[data-cue="penetration"] {
+  border-left-color: #34372f;
+}
+
+.hit-status[data-cue="ricochet"] {
+  border-left-color: #9a6337;
+}
+
+.hit-status[data-cue="shatter"] {
+  border-left-color: #69665b;
+}
+
 .controls-hint {
   position: fixed;
   right: 1rem;
