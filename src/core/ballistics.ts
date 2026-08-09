@@ -15,6 +15,7 @@ export const TUNING = {
   RICOCHET_ANGLE_DEGREES: 70,
   OVERMATCH_CALIBER_MULTIPLIER: 3,
   RICOCHET_SPEED_MULTIPLIER: 0.65,
+  RICOCHET_PENETRATION_MULTIPLIER: 0.65,
   RICOCHET_SPREAD_DEGREES: 3,
   PENETRATION_GUARANTEED_MULTIPLIER: 1.1,
   SHATTER_MULTIPLIER: 0.9,
@@ -133,7 +134,7 @@ export function createRicochetContinuation(
   return {
     direction,
     speed: input.speed * TUNING.RICOCHET_SPEED_MULTIPLIER,
-    penetration: input.penetration * TUNING.RICOCHET_SPEED_MULTIPLIER,
+    penetration: input.penetration * TUNING.RICOCHET_PENETRATION_MULTIPLIER,
     ricochetCount,
     shouldSpawn,
   };

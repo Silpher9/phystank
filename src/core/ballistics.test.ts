@@ -8,6 +8,7 @@ import {
 } from "./ballistics";
 
 const FRONT_NORMAL: Vector3 = { x: 0, y: 0, z: 1 };
+const ROOF_NORMAL: Vector3 = { x: 0, y: 1, z: 0 };
 
 function directionAtImpactAngle(degrees: number): Vector3 {
   const radians = (degrees * Math.PI) / 180;
@@ -48,6 +49,34 @@ describe("resolveHit", () => {
       shouldSpawnContinuation: true,
     });
     expect(result?.impactAngleDegrees).toBeCloseTo(80);
+  });
+
+  it("uses the same angle calculation for a vertical roof facet", () => {
+    const result = resolveHit({
+      shellDirection: { x: 0, y: -1, z: 0 },
+      facetNormal: ROOF_NORMAL,
+      armorThickness: 20,
+      shellCaliber: 30,
+      penetration: 50,
+    });
+
+    expect(result).toMatchObject({
+      outcome: HitOutcome.PENETRATION,
+      impactAngleDegrees: 0,
+      effectiveArmor: 20,
+    });
+  });
+
+  it("does not ricochet at the exact 70-degree threshold", () => {
+    const result = resolveHit({
+      shellDirection: directionAtImpactAngle(TUNING.RICOCHET_ANGLE_DEGREES),
+      facetNormal: FRONT_NORMAL,
+      armorThickness: 50,
+      shellCaliber: 75,
+      penetration: 1_000,
+    });
+
+    expect(result?.outcome).toBe(HitOutcome.PENETRATION);
   });
 
   it("shatters when the plate is too thick", () => {
@@ -106,6 +135,22 @@ describe("resolveHit", () => {
     expect(result?.outcome).toBe(HitOutcome.PENETRATION);
     expect(result?.penetrationChance).toBeCloseTo(0.5);
   });
+
+  it("reports a ricochet but does not continue after the deflection budget", () => {
+    const result = resolveHit({
+      shellDirection: directionAtImpactAngle(80),
+      facetNormal: FRONT_NORMAL,
+      armorThickness: 50,
+      shellCaliber: 75,
+      penetration: 10_000,
+      ricochetCount: TUNING.MAX_RICOCHETS,
+    });
+
+    expect(result).toMatchObject({
+      outcome: HitOutcome.RICOCHET,
+      shouldSpawnContinuation: false,
+    });
+  });
 });
 
 describe("createRicochetContinuation", () => {
@@ -121,7 +166,7 @@ describe("createRicochetContinuation", () => {
 
     expect(continuation).toMatchObject({
       speed: 100 * TUNING.RICOCHET_SPEED_MULTIPLIER,
-      penetration: 120 * TUNING.RICOCHET_SPEED_MULTIPLIER,
+      penetration: 120 * TUNING.RICOCHET_PENETRATION_MULTIPLIER,
       ricochetCount: 1,
       shouldSpawn: true,
     });
