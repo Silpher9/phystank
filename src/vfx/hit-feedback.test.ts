@@ -4,7 +4,11 @@ import { describe, expect, it } from "vitest";
 import { HitOutcome } from "../core/ballistics";
 import { GameEventBus } from "../core/events";
 import { createPlayerCamera } from "../camera";
-import { HIT_EFFECT_PROFILES, HitFeedbackSystem } from "./hit-feedback";
+import {
+  HIT_EFFECT_PROFILES,
+  SHOT_FLASH_TUNING,
+  HitFeedbackSystem,
+} from "./hit-feedback";
 
 describe("gritty hit feedback", () => {
   it("keeps the three armor outcomes distinct by form and motion", () => {
@@ -40,6 +44,10 @@ describe("gritty hit feedback", () => {
       position: { x: 0, y: 1.9, z: -2 },
     });
     expect(feedback.activeTracerCount).toBe(1);
+    expect(scene.getMeshByName("muzzle-flash-core")).not.toBeNull();
+    expect(scene.getMeshByName("muzzle-flash-burst")).not.toBeNull();
+    expect(SHOT_FLASH_TUNING.lifetime).toBeLessThanOrEqual(0.05);
+    expect(SHOT_FLASH_TUNING.emissivePeak).toBeGreaterThanOrEqual(1.2);
 
     events.emit("SHELL_DESPAWNED", {
       shellId: "test-shell",

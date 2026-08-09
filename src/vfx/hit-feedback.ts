@@ -35,6 +35,13 @@ export const HIT_EFFECT_PROFILES = {
   },
 } as const;
 
+export const SHOT_FLASH_TUNING = {
+  lifetime: 0.05,
+  axialLength: 0.68,
+  emissivePeak: 1.35,
+  dustCount: 7,
+} as const;
+
 type MovingEffect = {
   mesh: Mesh;
   material: StandardMaterial;
@@ -137,7 +144,11 @@ export class HitFeedbackSystem {
     const direction = toVector3(event.direction).normalize();
     this.tracers.set(event.shellId, new Tracer(this.scene, event.shellId, position, direction));
     this.spawnFlash(position, direction);
-    this.spawnDust(new Vector3(position.x, 0.12, position.z), direction, 5);
+    this.spawnDust(
+      new Vector3(position.x, 0.12, position.z),
+      direction,
+      SHOT_FLASH_TUNING.dustCount,
+    );
     this.addShake(0.11, 0.09);
     this.setCue("FIRE", "shot");
   }
@@ -188,16 +199,35 @@ export class HitFeedbackSystem {
   }
 
   private spawnFlash(point: Vector3, direction: Vector3): void {
-    const mesh = MeshBuilder.CreateSphere("muzzle-flash", { diameter: 0.4, segments: 6 }, this.scene);
-    mesh.position.copyFrom(point.add(direction.scale(0.16)));
-    mesh.scaling.set(0.75, 0.75, 1.5);
-    this.addTransient(mesh, {
-      color: Color3.FromHexString("#b86f35"),
+    const color = new Color3(SHOT_FLASH_TUNING.emissivePeak, 0.72, 0.26);
+    const core = MeshBuilder.CreateBox("muzzle-flash-core", {
+      width: 0.13,
+      height: 0.13,
+      depth: SHOT_FLASH_TUNING.axialLength,
+    }, this.scene);
+    core.position.copyFrom(point.add(direction.scale(SHOT_FLASH_TUNING.axialLength * 0.35)));
+    core.rotationQuaternion = lookAlong(direction);
+    this.addTransient(core, {
+      color,
       emissive: true,
-      velocity: direction.scale(0.8),
-      lifetime: 0.055,
+      velocity: direction.scale(0.65),
+      lifetime: SHOT_FLASH_TUNING.lifetime,
       gravity: 0,
-      growth: 0.35,
+      growth: 0.2,
+    });
+
+    const burst = MeshBuilder.CreatePolyhedron("muzzle-flash-burst", {
+      type: 1,
+      size: 0.28,
+    }, this.scene);
+    burst.position.copyFrom(point.add(direction.scale(0.08)));
+    this.addTransient(burst, {
+      color,
+      emissive: true,
+      velocity: direction.scale(0.25),
+      lifetime: SHOT_FLASH_TUNING.lifetime,
+      gravity: 0,
+      growth: 0.3,
     });
   }
 
