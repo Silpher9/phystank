@@ -7,7 +7,12 @@ import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
 import { createRicochetContinuation, HitOutcome, resolveHit } from "./core/ballistics";
 import { getFacetForMesh, getFacetNormalFromPick, type TankEntity } from "./tank/tank";
 
-const TUNING = { speed: 45, gravity: 9.81, lifetime: 4, arenaLimit: 17, epsilon: 0.02, caliber: 75, penetration: 150 };
+export const RICOCHET_EPSILON = 0.02;
+const TUNING = { speed: 45, gravity: 9.81, lifetime: 4, arenaLimit: 17, caliber: 75, penetration: 150 };
+
+export function offsetRicochetOrigin(hitPoint: Vector3, normal: Vector3): Vector3 {
+  return hitPoint.add(normal.scale(RICOCHET_EPSILON));
+}
 
 export class ShellSystem {
   private readonly shells: Shell[] = [];
@@ -64,7 +69,7 @@ class Shell {
         if (result?.outcome === HitOutcome.RICOCHET && result.shouldSpawnContinuation) {
           const continuation = createRicochetContinuation({ shellDirection: this.velocity, facetNormal: normal, speed: this.velocity.length(), penetration: this.penetration, ricochetCount: this.ricochets });
           if (continuation.shouldSpawn) {
-            this.position = pick.pickedPoint.add(new Vector3(normal.x, normal.y, normal.z).scale(TUNING.epsilon));
+            this.position = offsetRicochetOrigin(pick.pickedPoint, new Vector3(normal.x, normal.y, normal.z));
             this.velocity = new Vector3(
               continuation.direction.x,
               continuation.direction.y,

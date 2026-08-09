@@ -49,6 +49,9 @@ describe("turret turn limiting", () => {
     const controller = new TankController(tank);
     controller.update(0, { forward: 0, turn: 0 });
 
+    const wallInnerEdge = 15.75;
+    const rotatedHullCornerRadius = 3.51;
+    expect(CONTROL_TUNING.ARENA_HALF_EXTENT + rotatedHullCornerRadius).toBeLessThanOrEqual(wallInnerEdge);
     expect(tank.root.position.x).toBe(CONTROL_TUNING.ARENA_HALF_EXTENT);
     expect(tank.root.position.z).toBe(CONTROL_TUNING.ARENA_HALF_EXTENT);
 
