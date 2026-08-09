@@ -36,4 +36,23 @@ describe("turret turn limiting", () => {
     scene.dispose();
     engine.dispose();
   });
+
+  it("keeps the hull's rotated footprint inside the arena walls", () => {
+    const engine = new NullEngine();
+    const scene = new Scene(engine);
+    const tank = createTank(scene, {
+      name: "bounds-test-tank",
+      profile: "BRAWLER",
+      position: new Vector3(20, 0, 20),
+      color: Color3.White(),
+    });
+    const controller = new TankController(tank);
+    controller.update(0, { forward: 0, turn: 0 });
+
+    expect(tank.root.position.x).toBe(CONTROL_TUNING.ARENA_HALF_EXTENT);
+    expect(tank.root.position.z).toBe(CONTROL_TUNING.ARENA_HALF_EXTENT);
+
+    scene.dispose();
+    engine.dispose();
+  });
 });

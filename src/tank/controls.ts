@@ -7,7 +7,8 @@ export const CONTROL_TUNING = {
   HULL_TURN_SPEED: 1.9,
   TURRET_TURN_SPEED: 1.15,
   RELOAD_DURATION_SECONDS: 2.2,
-  ARENA_HALF_EXTENT: 14,
+  // 15.75 (wall inside) minus the tank's rotated corner radius.
+  ARENA_HALF_EXTENT: 12.2,
 } as const;
 
 export type DriveInput = Readonly<{ forward: number; turn: number }>;
