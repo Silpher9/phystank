@@ -16,6 +16,7 @@ export type TankFacet = Readonly<{
 
 export type TankEntity = Readonly<{
   root: TransformNode;
+  turret: TransformNode;
   profile: ArmorProfile;
   facets: Readonly<Record<ArmorFacetId, TankFacet>>;
 }>;
@@ -113,6 +114,9 @@ export function createTank(scene: Scene, options: CreateTankOptions): TankEntity
   core.material = darkMaterial;
   core.isPickable = false;
 
+  const turret = new TransformNode(`${options.name}-turret`, scene);
+  turret.parent = root;
+
   const facets = {
     FRONT: registerFacet(
       "FRONT",
@@ -137,7 +141,7 @@ export function createTank(scene: Scene, options: CreateTankOptions): TankEntity
     TURRET_FRONT: registerFacet(
       "TURRET_FRONT",
       profile,
-      createPlate(`${options.name}-turret-front`, TURRET_FRONT_LAYOUT, root, armorMaterial, scene),
+      createPlate(`${options.name}-turret-front`, TURRET_FRONT_LAYOUT, turret, armorMaterial, scene),
     ),
     ROOF: registerFacet(
       "ROOF",
@@ -151,18 +155,18 @@ export function createTank(scene: Scene, options: CreateTankOptions): TankEntity
     { diameter: 2.65, height: 0.55, tessellation: 8 },
     scene,
   );
-  turretCore.parent = root;
+  turretCore.parent = turret;
   turretCore.position.y = 2.08;
   turretCore.material = darkMaterial;
   turretCore.isPickable = false;
 
   const cannon = MeshBuilder.CreateBox(`${options.name}-cannon`, { width: 0.3, height: 0.3, depth: 2.5 }, scene);
-  cannon.parent = root;
+  cannon.parent = turret;
   cannon.position.set(0, 2.37, -1.9);
   cannon.material = armorMaterial;
   cannon.isPickable = false;
 
-  return { root, profile, facets };
+  return { root, turret, profile, facets };
 }
 
 /** Returns armor data only when the picked mesh is one of the named plates. */
