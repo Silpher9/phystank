@@ -7,6 +7,7 @@ import { Color3, Color4 } from "@babylonjs/core/Maths/math.color";
 import { Vector3 } from "@babylonjs/core/Maths/math.vector";
 import { MeshBuilder } from "@babylonjs/core/Meshes/meshBuilder";
 import { Scene } from "@babylonjs/core/scene";
+import { createTank } from "./tank/tank";
 import "./styles.css";
 
 /** Feel knobs: keep the fixed 3/4 view in one easy-to-tune place. */
@@ -71,6 +72,20 @@ function createScene(engine: Engine, canvas: HTMLCanvasElement): Scene {
   fill.groundColor = Color3.FromHexString("#1b211d");
 
   createArena(scene);
+  createTank(scene, {
+    name: "brawler-demo",
+    profile: "BRAWLER",
+    position: new Vector3(-5.5, 0, 2.5),
+    rotationY: Math.PI / 8,
+    color: Color3.FromHexString("#777f47"),
+  });
+  createTank(scene, {
+    name: "allrounder-demo",
+    profile: "ALLROUNDER",
+    position: new Vector3(5.5, 0, -2.5),
+    rotationY: -Math.PI * 0.78,
+    color: Color3.FromHexString("#536d75"),
+  });
   return scene;
 }
 
