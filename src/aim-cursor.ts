@@ -1,12 +1,16 @@
 import { Color3 } from "@babylonjs/core/Maths/math.color";
 import { Vector3 } from "@babylonjs/core/Maths/math.vector";
-import { MeshBuilder } from "@babylonjs/core/Meshes/meshBuilder";
+import { GreasedLineSimpleMaterial } from "@babylonjs/core/Materials/GreasedLine/greasedLineSimpleMaterial";
+import { GreasedLineMeshMaterialType } from "@babylonjs/core/Materials/GreasedLine/greasedLineMaterialInterfaces";
+import { CreateGreasedLine } from "@babylonjs/core/Meshes/Builders/greasedLineBuilder";
+import type { GreasedLineBaseMesh } from "@babylonjs/core/Meshes/GreasedLine/greasedLineBaseMesh";
 import { TransformNode } from "@babylonjs/core/Meshes/transformNode";
 import type { Scene } from "@babylonjs/core/scene";
 
 export const AIM_CURSOR_TUNING = {
   elevation: 0.06,
-  contrastGap: 0.055,
+  lineWidthPixels: 4,
+  contrastWidthPixels: 8,
   centerHalfExtent: 0.13,
   contrastCenterHalfExtent: 0.19,
   arcDegrees: 54,
@@ -34,36 +38,58 @@ export function calculateAimCursorRadius(
 
 export class AimCursorSystem {
   private readonly root: TransformNode;
-  private readonly spreadRing;
-  private readonly contrastRing;
-  private readonly center;
-  private readonly contrastCenter;
+  private readonly spreadRing: GreasedLineBaseMesh;
+  private readonly contrastRing: GreasedLineBaseMesh;
+  private readonly center: GreasedLineBaseMesh;
+  private readonly contrastCenter: GreasedLineBaseMesh;
+  private readonly spreadMaterial: GreasedLineSimpleMaterial;
+  private readonly centerMaterial: GreasedLineSimpleMaterial;
+  private readonly cursorMaterials: GreasedLineSimpleMaterial[];
   private _radius = 0;
   private _reachable = true;
 
   constructor(private readonly scene: Scene) {
     this.root = new TransformNode("aim-cursor", scene);
-    this.contrastRing = MeshBuilder.CreateLineSystem("aim-cursor-contrast-ring", {
-      lines: createArcSegments(),
-    }, scene);
-    this.spreadRing = MeshBuilder.CreateLineSystem("aim-cursor-spread-ring", {
-      lines: createArcSegments(),
-    }, scene);
-    this.contrastCenter = MeshBuilder.CreateLineSystem("aim-cursor-contrast-center", {
-      lines: createCenterLines(AIM_CURSOR_TUNING.contrastCenterHalfExtent),
-    }, scene);
-    this.center = MeshBuilder.CreateLineSystem("aim-cursor-center", {
-      lines: createCenterLines(AIM_CURSOR_TUNING.centerHalfExtent),
-    }, scene);
-
-    this.contrastRing.color = AIM_CURSOR_COLORS.contrast;
-    this.contrastRing.alpha = 0.95;
-    this.spreadRing.color = AIM_CURSOR_COLORS.reachable;
-    this.spreadRing.alpha = 0.92;
-    this.contrastCenter.color = AIM_CURSOR_COLORS.contrast;
-    this.contrastCenter.alpha = 0.95;
-    this.center.color = AIM_CURSOR_COLORS.reachable;
-    this.center.alpha = 0.92;
+    const contrastRing = createCursorLine(
+      "aim-cursor-contrast-ring",
+      createArcSegments(),
+      AIM_CURSOR_TUNING.contrastWidthPixels,
+      AIM_CURSOR_COLORS.contrast,
+      scene,
+    );
+    const spreadRing = createCursorLine(
+      "aim-cursor-spread-ring",
+      createArcSegments(),
+      AIM_CURSOR_TUNING.lineWidthPixels,
+      AIM_CURSOR_COLORS.reachable,
+      scene,
+    );
+    const contrastCenter = createCursorLine(
+      "aim-cursor-contrast-center",
+      createCenterLines(AIM_CURSOR_TUNING.contrastCenterHalfExtent),
+      AIM_CURSOR_TUNING.contrastWidthPixels,
+      AIM_CURSOR_COLORS.contrast,
+      scene,
+    );
+    const center = createCursorLine(
+      "aim-cursor-center",
+      createCenterLines(AIM_CURSOR_TUNING.centerHalfExtent),
+      AIM_CURSOR_TUNING.lineWidthPixels,
+      AIM_CURSOR_COLORS.reachable,
+      scene,
+    );
+    this.contrastRing = contrastRing.mesh;
+    this.spreadRing = spreadRing.mesh;
+    this.contrastCenter = contrastCenter.mesh;
+    this.center = center.mesh;
+    this.spreadMaterial = spreadRing.material;
+    this.centerMaterial = center.material;
+    this.cursorMaterials = [
+      contrastRing.material,
+      spreadRing.material,
+      contrastCenter.material,
+      center.material,
+    ];
 
     for (const mesh of [this.contrastRing, this.spreadRing, this.contrastCenter, this.center]) {
       mesh.parent = this.root;
@@ -113,12 +139,12 @@ export class AimCursorSystem {
       aimPoint.z,
     );
     this.spreadRing.scaling.set(this._radius, 1, this._radius);
-    const contrastRadius = this._radius + AIM_CURSOR_TUNING.contrastGap;
-    this.contrastRing.scaling.set(contrastRadius, 1, contrastRadius);
-    this.spreadRing.color = reachable
+    this.contrastRing.scaling.set(this._radius, 1, this._radius);
+    const cursorColor = reachable
       ? AIM_CURSOR_COLORS.reachable
       : AIM_CURSOR_COLORS.unreachable;
-    this.center.color = this.spreadRing.color;
+    this.spreadMaterial.setColor(cursorColor);
+    this.centerMaterial.setColor(cursorColor);
     const warningRotation = reachable ? 0 : Math.PI / 4;
     this.center.rotation.y = warningRotation;
     this.contrastCenter.rotation.y = warningRotation;
@@ -127,7 +153,31 @@ export class AimCursorSystem {
 
   dispose(): void {
     this.root.dispose();
+    this.cursorMaterials.forEach((material) => material.dispose());
   }
+}
+
+function createCursorLine(
+  name: string,
+  points: Vector3[][],
+  width: number,
+  color: Color3,
+  scene: Scene,
+): { mesh: GreasedLineBaseMesh; material: GreasedLineSimpleMaterial } {
+  const mesh = CreateGreasedLine(
+    name,
+    { points },
+    {
+      materialType: GreasedLineMeshMaterialType.MATERIAL_TYPE_SIMPLE,
+      width,
+      sizeAttenuation: true,
+      color,
+    },
+    scene,
+  );
+  const material = mesh.material as GreasedLineSimpleMaterial;
+  material.alpha = name.includes("contrast") ? 0.95 : 0.92;
+  return { mesh, material };
 }
 
 function createArcSegments(): Vector3[][] {

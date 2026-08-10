@@ -1,7 +1,7 @@
 import { NullEngine } from "@babylonjs/core/Engines/nullEngine";
+import { GreasedLineSimpleMaterial } from "@babylonjs/core/Materials/GreasedLine/greasedLineSimpleMaterial";
 import { Vector3 } from "@babylonjs/core/Maths/math.vector";
 import { Scene } from "@babylonjs/core/scene";
-import { LinesMesh } from "@babylonjs/core/Meshes/linesMesh";
 import { describe, expect, it } from "vitest";
 import {
   AIM_CURSOR_TUNING,
@@ -38,9 +38,14 @@ describe("aim cursor", () => {
     );
     expect(ring?.absolutePosition.z).toBeCloseTo(aimPoint.z);
     expect(ring?.scaling.x).toBeCloseTo(cursor.radius);
-    expect(contrast?.scaling.x).toBeCloseTo(
-      cursor.radius + AIM_CURSOR_TUNING.contrastGap,
-    );
+    expect(contrast?.scaling.x).toBeCloseTo(cursor.radius);
+    const ringMaterial = ring?.material as GreasedLineSimpleMaterial;
+    const contrastMaterial = contrast?.material as GreasedLineSimpleMaterial;
+    expect(AIM_CURSOR_TUNING.lineWidthPixels).toBeGreaterThanOrEqual(3);
+    expect(ringMaterial.width).toBe(AIM_CURSOR_TUNING.lineWidthPixels);
+    expect(contrastMaterial.width).toBe(AIM_CURSOR_TUNING.contrastWidthPixels);
+    expect(contrastMaterial.width).toBeGreaterThan(ringMaterial.width);
+    expect(ringMaterial.sizeAttenuation).toBe(true);
     expect(ring?.renderingGroupId).toBe(AIM_CURSOR_TUNING.renderingGroupId);
     for (const name of [
       "aim-cursor-contrast-ring",
@@ -52,25 +57,28 @@ describe("aim cursor", () => {
     }
 
     const wideRadius = cursor.radius;
-    cursor.update(origin, aimPoint, 0.25);
-    expect(cursor.radius).toBeCloseTo(0.17, 2);
+    const closeAimPoint = new Vector3(0, 0, -12);
+    cursor.update(origin, closeAimPoint, 0.25);
+    expect(cursor.radius).toBeCloseTo(0.05, 2);
     expect(ring?.scaling.x).toBeLessThan(wideRadius);
+    expect(contrast?.scaling.x).toBeCloseTo(cursor.radius);
 
-    const center = scene.getMeshByName("aim-cursor-center") as LinesMesh;
-    const reachableColor = center.color.clone();
+    const center = scene.getMeshByName("aim-cursor-center")!;
+    const centerMaterial = center.material as GreasedLineSimpleMaterial;
+    const reachableColor = centerMaterial.color!.clone();
     const positionBeforeWarning = ring!.absolutePosition.clone();
     const radiusBeforeWarning = cursor.radius;
-    cursor.update(origin, aimPoint, 0.25, false);
+    cursor.update(origin, closeAimPoint, 0.25, false);
     expect(cursor.reachable).toBe(false);
     expect(cursor.radius).toBeCloseTo(radiusBeforeWarning);
     expect(ring?.absolutePosition.equalsWithEpsilon(positionBeforeWarning)).toBe(true);
     expect(center.rotation.y).toBeCloseTo(Math.PI / 4);
-    expect(center.color.equals(reachableColor)).toBe(false);
+    expect(centerMaterial.color!.equals(reachableColor)).toBe(false);
 
-    cursor.update(origin, aimPoint, 0.25, true);
+    cursor.update(origin, closeAimPoint, 0.25, true);
     expect(cursor.reachable).toBe(true);
     expect(center.rotation.y).toBe(0);
-    expect(center.color.equals(reachableColor)).toBe(true);
+    expect(centerMaterial.color!.equals(reachableColor)).toBe(true);
 
     cursor.update(origin, null, 7);
     expect(cursor.visible).toBe(false);
