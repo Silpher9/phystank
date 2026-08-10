@@ -14,6 +14,12 @@ export const AIM_CURSOR_TUNING = {
   renderingGroupId: 2,
 } as const;
 
+const AIM_CURSOR_COLORS = {
+  contrast: Color3.FromHexString("#252822"),
+  reachable: Color3.FromHexString("#d9d4bd"),
+  unreachable: Color3.FromHexString("#a9654f"),
+} as const;
+
 type Point = Readonly<{ x: number; y: number; z: number }>;
 
 /** Projects an angular shot cone onto the horizontal plane at aim distance. */
@@ -30,7 +36,10 @@ export class AimCursorSystem {
   private readonly root: TransformNode;
   private readonly spreadRing;
   private readonly contrastRing;
+  private readonly center;
+  private readonly contrastCenter;
   private _radius = 0;
+  private _reachable = true;
 
   constructor(private readonly scene: Scene) {
     this.root = new TransformNode("aim-cursor", scene);
@@ -40,29 +49,29 @@ export class AimCursorSystem {
     this.spreadRing = MeshBuilder.CreateLineSystem("aim-cursor-spread-ring", {
       lines: createArcSegments(),
     }, scene);
-    const contrastCenter = MeshBuilder.CreateLineSystem("aim-cursor-contrast-center", {
+    this.contrastCenter = MeshBuilder.CreateLineSystem("aim-cursor-contrast-center", {
       lines: createCenterLines(AIM_CURSOR_TUNING.contrastCenterHalfExtent),
     }, scene);
-    const center = MeshBuilder.CreateLineSystem("aim-cursor-center", {
+    this.center = MeshBuilder.CreateLineSystem("aim-cursor-center", {
       lines: createCenterLines(AIM_CURSOR_TUNING.centerHalfExtent),
     }, scene);
 
-    this.contrastRing.color = Color3.FromHexString("#252822");
+    this.contrastRing.color = AIM_CURSOR_COLORS.contrast;
     this.contrastRing.alpha = 0.95;
-    this.spreadRing.color = Color3.FromHexString("#d9d4bd");
+    this.spreadRing.color = AIM_CURSOR_COLORS.reachable;
     this.spreadRing.alpha = 0.92;
-    contrastCenter.color = Color3.FromHexString("#252822");
-    contrastCenter.alpha = 0.95;
-    center.color = Color3.FromHexString("#d9d4bd");
-    center.alpha = 0.92;
+    this.contrastCenter.color = AIM_CURSOR_COLORS.contrast;
+    this.contrastCenter.alpha = 0.95;
+    this.center.color = AIM_CURSOR_COLORS.reachable;
+    this.center.alpha = 0.92;
 
-    for (const mesh of [this.contrastRing, this.spreadRing, contrastCenter, center]) {
+    for (const mesh of [this.contrastRing, this.spreadRing, this.contrastCenter, this.center]) {
       mesh.parent = this.root;
       mesh.isPickable = false;
       mesh.renderingGroupId = AIM_CURSOR_TUNING.renderingGroupId;
     }
     this.contrastRing.position.y = -0.002;
-    center.position.y = 0.004;
+    this.center.position.y = 0.004;
     this.scene.setRenderingAutoClearDepthStencil(
       AIM_CURSOR_TUNING.renderingGroupId,
       true,
@@ -80,7 +89,16 @@ export class AimCursorSystem {
     return this.root.isEnabled();
   }
 
-  update(origin: Point, aimPoint: Point | null, spreadDegrees: number): void {
+  get reachable(): boolean {
+    return this._reachable;
+  }
+
+  update(
+    origin: Point,
+    aimPoint: Point | null,
+    spreadDegrees: number,
+    reachable = true,
+  ): void {
     if (!aimPoint) {
       this.root.setEnabled(false);
       return;
@@ -88,10 +106,22 @@ export class AimCursorSystem {
 
     const distance = Math.hypot(aimPoint.x - origin.x, aimPoint.z - origin.z);
     this._radius = calculateAimCursorRadius(distance, spreadDegrees);
-    this.root.position.set(aimPoint.x, AIM_CURSOR_TUNING.elevation, aimPoint.z);
+    this._reachable = reachable;
+    this.root.position.set(
+      aimPoint.x,
+      aimPoint.y + AIM_CURSOR_TUNING.elevation,
+      aimPoint.z,
+    );
     this.spreadRing.scaling.set(this._radius, 1, this._radius);
     const contrastRadius = this._radius + AIM_CURSOR_TUNING.contrastGap;
     this.contrastRing.scaling.set(contrastRadius, 1, contrastRadius);
+    this.spreadRing.color = reachable
+      ? AIM_CURSOR_COLORS.reachable
+      : AIM_CURSOR_COLORS.unreachable;
+    this.center.color = this.spreadRing.color;
+    const warningRotation = reachable ? 0 : Math.PI / 4;
+    this.center.rotation.y = warningRotation;
+    this.contrastCenter.rotation.y = warningRotation;
     this.root.setEnabled(true);
   }
 

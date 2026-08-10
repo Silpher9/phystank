@@ -18,6 +18,7 @@ export type TankFacet = Readonly<{
 export type TankEntity = Readonly<{
   root: TransformNode;
   turret: TransformNode;
+  gunPivot: TransformNode;
   cannon: AbstractMesh;
   muzzle: TransformNode;
   profile: ArmorProfile;
@@ -173,9 +174,13 @@ export function createTank(scene: Scene, options: CreateTankOptions): TankEntity
   turretCore.material = darkMaterial;
   turretCore.isPickable = false;
 
+  const gunPivot = new TransformNode(`${options.name}-gun-pivot`, scene);
+  gunPivot.parent = turret;
+  gunPivot.position.set(0, 2.37, -0.65);
+
   const cannon = MeshBuilder.CreateBox(`${options.name}-cannon`, { width: 0.3, height: 0.3, depth: 2.5 }, scene);
-  cannon.parent = turret;
-  cannon.position.set(0, 2.37, -1.9);
+  cannon.parent = gunPivot;
+  cannon.position.set(0, 0, -1.25);
   cannon.material = armorMaterial;
   cannon.isPickable = false;
 
@@ -183,7 +188,7 @@ export function createTank(scene: Scene, options: CreateTankOptions): TankEntity
   muzzle.parent = cannon;
   muzzle.position.z = -1.25;
 
-  return { root, turret, cannon, muzzle, profile, facets };
+  return { root, turret, gunPivot, cannon, muzzle, profile, facets };
 }
 
 function createPlate(

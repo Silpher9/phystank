@@ -16,7 +16,6 @@ export const SHELL_TUNING = {
   arenaLimit: ARENA_SIZE / 2 + WALL_THICKNESS,
   caliber: 75,
   penetration: 150,
-  targetHeight: 1.2,
 } as const;
 
 export function offsetRicochetOrigin(hitPoint: Vector3, normal: Vector3): Vector3 {
@@ -32,21 +31,12 @@ export class ShellSystem {
     private readonly random: () => number = Math.random,
   ) {}
 
-  fire(owner: TankEntity, target: Vector3, spreadDegrees = 0): void {
+  fire(owner: TankEntity, spreadDegrees = 0): void {
+    owner.muzzle.computeWorldMatrix(true);
     const origin = owner.muzzle.getAbsolutePosition();
-    const horizontal = target.subtract(origin); horizontal.y = 0;
-    if (horizontal.lengthSquared() < 0.01) return;
-    const distance = horizontal.length();
-    const direction = horizontal.normalize();
-    const ballisticVelocity = calculateBallisticVelocity(
-      origin,
-      direction,
-      distance,
-      SHELL_TUNING.targetHeight,
-    );
-    if (!ballisticVelocity) return;
-    const spread = applyAimSpread(ballisticVelocity, spreadDegrees, this.random);
-    const velocity = spread.direction.scale(ballisticVelocity.length());
+    const barrelDirection = getBarrelDirection(owner);
+    const spread = applyAimSpread(barrelDirection, spreadDegrees, this.random);
+    const velocity = spread.direction.scale(SHELL_TUNING.speed);
     const shellId = `shell-${this.nextShellId++}`;
     this.events.emit("SHOT_FIRED", {
       shellId,
@@ -64,6 +54,14 @@ export class ShellSystem {
       if (!shell.update(deltaSeconds)) this.shells.splice(this.shells.indexOf(shell), 1);
     }
   }
+}
+
+export function getBarrelDirection(owner: TankEntity): Vector3 {
+  owner.muzzle.computeWorldMatrix(true);
+  return Vector3.TransformNormal(
+    new Vector3(0, 0, -1),
+    owner.muzzle.getWorldMatrix(),
+  ).normalize();
 }
 
 export function applyAimSpread(

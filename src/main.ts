@@ -20,6 +20,8 @@ import { DrivingSuspensionSystem } from "./tank/driving-suspension";
 import { HitSuspensionSystem } from "./tank/hit-suspension";
 import { AimConvergenceSystem } from "./tank/aim-convergence";
 import { AimCursorSystem } from "./aim-cursor";
+import { getHitTarget } from "./hit-targets";
+import { GunElevationSystem } from "./tank/gun-elevation";
 import "./styles.css";
 
 const canvas = document.querySelector<HTMLCanvasElement>("#game-canvas");
@@ -53,6 +55,7 @@ const hitFeedback = new HitFeedbackSystem(
 const shellSystem = new ShellSystem(scene, gameEvents);
 const aimConvergence = new AimConvergenceSystem(gameEvents);
 const aimCursor = new AimCursorSystem(scene);
+const gunElevation = new GunElevationSystem(playerTank);
 const playerHullPose = new HullPoseComposer(playerTank);
 const hullPoseTargets = tanks.map((tank) => ({
   tank,
@@ -65,7 +68,10 @@ const drivingSuspension = new DrivingSuspensionSystem(gameEvents, playerHullPose
 const hitSuspension = new HitSuspensionSystem(gameEvents, hullPoseTargets);
 const playerController = createPlayerController(scene, canvas, playerTank, gameEvents, () => {
   const target = playerController.aimPoint;
-  if (target) shellSystem.fire(playerTank, target, aimConvergence.currentSpreadDegrees);
+  if (target) {
+    gunElevation.update(target);
+    shellSystem.fire(playerTank, aimConvergence.currentSpreadDegrees);
+  }
 });
 engine.runRenderLoop(() => {
   const deltaSeconds = engine.getDeltaTime() / 1000;
@@ -74,15 +80,17 @@ engine.runRenderLoop(() => {
     turretYawRadians: playerTank.turret.rotation.y,
     aimPoint: playerController.aimPoint,
   });
-  aimCursor.update(
-    playerTank.muzzle.getAbsolutePosition(),
-    playerController.aimPoint,
-    aimConvergence.currentSpreadDegrees,
-  );
   drivingSuspension.update(deltaSeconds);
   shotRecoil.update(deltaSeconds);
   hitSuspension.update(deltaSeconds);
   hullPoseTargets.forEach(({ hullPose }) => hullPose.apply());
+  gunElevation.update(playerController.aimPoint);
+  aimCursor.update(
+    playerTank.muzzle.getAbsolutePosition(),
+    playerController.aimPoint,
+    aimConvergence.currentSpreadDegrees,
+    gunElevation.reachable,
+  );
   followPlayer(camera, playerTank.root.position);
   shellSystem.update(deltaSeconds);
   hitFeedback.update(deltaSeconds);
@@ -146,6 +154,13 @@ function createPlayerController(
   canvas.addEventListener("pointermove", (event) => {
     const bounds = canvas.getBoundingClientRect();
     const ray = scene.createPickingRay(event.clientX - bounds.left, event.clientY - bounds.top, null, scene.activeCamera);
+    const pick = scene.pickWithRay(ray, (mesh) => (
+      Boolean(getHitTarget(mesh)) && !mesh.isDescendantOf(playerTank.root)
+    ));
+    if (pick?.hit && pick.pickedPoint) {
+      controller.setAimPoint(pick.pickedPoint);
+      return;
+    }
     const distance = ray.intersectsPlane(groundPlane);
     if (distance !== null) controller.setAimPoint(ray.origin.add(ray.direction.scale(distance)));
   });

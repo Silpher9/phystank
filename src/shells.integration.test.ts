@@ -10,6 +10,7 @@ import { HitCategory, ObjectHitOutcome } from "./core/impacts";
 import { DebugOverlaySystem } from "./debug/debug-overlay";
 import { registerHitTarget } from "./hit-targets";
 import { SHELL_TUNING, ShellSystem } from "./shells";
+import { GunElevationSystem } from "./tank/gun-elevation";
 import { createTank } from "./tank/tank";
 
 describe("shell integration", () => {
@@ -44,7 +45,7 @@ describe("shell integration", () => {
     });
     plate.computeWorldMatrix(true);
 
-    shells.fire(player, muzzle.add(new Vector3(0, 0, -20)));
+    aimAndFire(shells, player, plate.position);
     shells.update(1 / 60);
 
     expect(SHELL_TUNING.speed).toBe(587);
@@ -78,7 +79,7 @@ describe("shell integration", () => {
     const debugOverlay = new DebugOverlaySystem(scene, events, [player, target]);
     debugOverlay.setEnabled(true);
     scene.meshes.forEach((mesh) => mesh.computeWorldMatrix(true));
-    shells.fire(player, target.root.position.clone());
+    aimAndFire(shells, player, target.root.position.add(new Vector3(0, 1.2, 0)));
     for (let frame = 0; frame < 240 && hits.length === 0; frame++) shells.update(1 / 60);
     expect(shots).toHaveLength(1);
     expect(shots[0].tank).toBe("player");
@@ -114,7 +115,7 @@ describe("shell integration", () => {
     const target = createTank(scene, { name: "far-target", profile: "ALLROUNDER", position: new Vector3(35.5, 0, -2.5), rotationY: -Math.PI * 0.78, color: Color3.Gray() });
     scene.meshes.forEach((mesh) => mesh.computeWorldMatrix(true));
 
-    shells.fire(player, target.root.position.clone());
+    aimAndFire(shells, player, target.root.position.add(new Vector3(0, 1.2, 0)));
     for (let frame = 0; frame < 240 && hits.length === 0; frame++) shells.update(1 / 60);
 
     expect(hits.length).toBeGreaterThan(0);
@@ -137,7 +138,7 @@ describe("shell integration", () => {
     registerHitTarget(wall, { category: HitCategory.HARD, targetId: "test-wall", equivalentArmor: 400 });
     scene.meshes.forEach((mesh) => mesh.computeWorldMatrix(true));
 
-    shells.fire(player, wall.position.clone());
+    aimAndFire(shells, player, wall.position);
     for (let frame = 0; frame < 240 && objectHits.length < 2; frame++) shells.update(1 / 60);
 
     expect(objectHits.map(({ targetId, outcome }) => ({ targetId, outcome }))).toEqual([
@@ -189,7 +190,7 @@ describe("shell integration", () => {
     });
     scene.meshes.forEach((mesh) => mesh.computeWorldMatrix(true));
 
-    shells.fire(player, new Vector3(0, 0, -12));
+    aimAndFire(shells, player, new Vector3(0, 1.2, -12));
     for (let frame = 0; frame < 300 && !crate.isDisposed(); frame++) {
       shells.update(1 / 120);
     }
@@ -205,3 +206,17 @@ describe("shell integration", () => {
     scene.dispose(); engine.dispose();
   });
 });
+
+function aimAndFire(
+  shells: ShellSystem,
+  tank: ReturnType<typeof createTank>,
+  target: Vector3,
+): void {
+  const direction = target.subtract(tank.root.getAbsolutePosition());
+  const desiredWorldYaw = Math.atan2(-direction.x, -direction.z);
+  tank.turret.rotation.y = desiredWorldYaw - tank.root.rotation.y;
+  const elevation = new GunElevationSystem(tank);
+  elevation.update(target);
+  shells.fire(tank);
+  elevation.dispose();
+}
