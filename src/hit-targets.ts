@@ -1,12 +1,19 @@
 import type { PickingInfo } from "@babylonjs/core/Collisions/pickingInfo";
 import { Vector3 } from "@babylonjs/core/Maths/math.vector";
 import type { AbstractMesh } from "@babylonjs/core/Meshes/abstractMesh";
+import type { TransformNode } from "@babylonjs/core/Meshes/transformNode";
 import type { HitTargetData } from "./core/impacts";
 
 const TARGET_BY_MESH = new WeakMap<AbstractMesh, HitTargetData>();
+const OUTWARD_ORIGIN_BY_MESH = new WeakMap<AbstractMesh, TransformNode>();
 
-export function registerHitTarget(mesh: AbstractMesh, target: HitTargetData): void {
+export function registerHitTarget(
+  mesh: AbstractMesh,
+  target: HitTargetData,
+  outwardOrigin?: TransformNode,
+): void {
   TARGET_BY_MESH.set(mesh, Object.freeze({ ...target }));
+  if (outwardOrigin) OUTWARD_ORIGIN_BY_MESH.set(mesh, outwardOrigin);
   mesh.isPickable = true;
 }
 
@@ -25,7 +32,9 @@ export function getHitNormalFromPick(pick: PickingInfo): Vector3 | null {
   const mesh = pick.pickedMesh;
   if (!normal || !hitPoint || !mesh) return null;
 
-  const outward = hitPoint.subtract(mesh.getBoundingInfo().boundingBox.centerWorld);
+  const outwardOrigin = OUTWARD_ORIGIN_BY_MESH.get(mesh)?.getAbsolutePosition()
+    ?? mesh.getBoundingInfo().boundingBox.centerWorld;
+  const outward = hitPoint.subtract(outwardOrigin);
   if (Vector3.Dot(normal, outward) < 0) normal.negateInPlace();
   return normal.normalize();
 }

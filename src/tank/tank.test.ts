@@ -20,7 +20,7 @@ describe("hull armor geometry", () => {
     expect(roof.depth / 2).toBeGreaterThan(Math.abs(rear.position.z) - rear.depth / 2);
   });
 
-  it("restores an outward normal so a shell leaving from inside is rejected", () => {
+  it("restores the outward normal for a contact beyond the outer plate face", () => {
     const engine = new NullEngine();
     const scene = new Scene(engine);
     const tank = createTank(scene, {
@@ -37,6 +37,42 @@ describe("hull armor geometry", () => {
       pickedMesh: rearMesh,
       pickedPoint: center.add(new Vector3(0, 0, 0.16)),
       // Babylon's picking API would have flipped this toward the outgoing ray.
+      getNormal: () => new Vector3(0, 0, -1),
+    } as unknown as PickingInfo;
+
+    const outwardNormal = getHitNormalFromPick(pick);
+    expect(outwardNormal?.z).toBeCloseTo(1);
+    expect(
+      resolveHit({
+        shellDirection: new Vector3(0, 0, 1),
+        facetNormal: outwardNormal!,
+        armorThickness: tank.facets.REAR.thickness,
+        shellCaliber: 75,
+        penetration: 100,
+      }),
+    ).toBeNull();
+
+    scene.dispose();
+    engine.dispose();
+  });
+
+  it("uses the hull center to reject a shell hitting the inner plate face", () => {
+    const engine = new NullEngine();
+    const scene = new Scene(engine);
+    const tank = createTank(scene, {
+      name: "inner-normal-test-tank",
+      profile: "BRAWLER",
+      position: Vector3.Zero(),
+      color: new Color3(0.4, 0.5, 0.3),
+    });
+    const rearMesh = tank.facets.REAR.mesh;
+    rearMesh.computeWorldMatrix(true);
+    const center = rearMesh.getBoundingInfo().boundingBox.centerWorld;
+    const pick = {
+      hit: true,
+      pickedMesh: rearMesh,
+      pickedPoint: center.add(new Vector3(0, 0, -0.16)),
+      // Babylon flips the inner-face normal toward the outgoing ray.
       getNormal: () => new Vector3(0, 0, -1),
     } as unknown as PickingInfo;
 
