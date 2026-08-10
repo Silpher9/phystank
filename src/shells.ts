@@ -32,22 +32,27 @@ export class ShellSystem {
   constructor(
     private readonly scene: Scene,
     private readonly events: GameEventBus,
+    private readonly random: () => number = Math.random,
   ) {}
 
-  fire(owner: TankEntity, target: Vector3): void {
+  fire(owner: TankEntity, target: Vector3, spreadDegrees = 0): void {
     const origin = owner.muzzle.getAbsolutePosition();
     const horizontal = target.subtract(origin); horizontal.y = 0;
     if (horizontal.lengthSquared() < 0.01) return;
     const distance = horizontal.length();
     const direction = horizontal.normalize();
-    const velocity = calculateBallisticVelocity(origin, direction, distance, TUNING.targetHeight);
-    if (!velocity) return;
+    const ballisticVelocity = calculateBallisticVelocity(origin, direction, distance, TUNING.targetHeight);
+    if (!ballisticVelocity) return;
+    const spread = applyAimSpread(ballisticVelocity, spreadDegrees, this.random);
+    const velocity = spread.direction.scale(ballisticVelocity.length());
     const shellId = `shell-${this.nextShellId++}`;
     this.events.emit("SHOT_FIRED", {
       shellId,
       tank: owner.root.name,
       muzzlePosition: toEventVector(origin),
       direction: toEventVector(velocity.normalizeToNew()),
+      spreadDegrees: Math.max(0, spreadDegrees),
+      deviationDegrees: spread.deviationDegrees,
     });
     this.shells.push(new Shell(shellId, this.scene, this.events, owner, origin, velocity, TUNING.penetration, 0));
   }
@@ -57,6 +62,30 @@ export class ShellSystem {
       if (!shell.update(deltaSeconds)) this.shells.splice(this.shells.indexOf(shell), 1);
     }
   }
+}
+
+export function applyAimSpread(
+  direction: Vector3,
+  spreadDegrees: number,
+  random: () => number,
+): Readonly<{ direction: Vector3; deviationDegrees: number }> {
+  const normalized = direction.normalizeToNew();
+  const maximumRadians = Math.max(0, spreadDegrees) * Math.PI / 180;
+  if (maximumRadians === 0) return { direction: normalized, deviationDegrees: 0 };
+
+  const deviationRadians = Math.sqrt(clamp(random(), 0, 1)) * maximumRadians;
+  const azimuth = clamp(random(), 0, 1) * Math.PI * 2;
+  const reference = Math.abs(normalized.y) < 0.99 ? Vector3.Up() : Vector3.Right();
+  const right = Vector3.Cross(normalized, reference).normalize();
+  const up = Vector3.Cross(right, normalized).normalize();
+  const radial = right.scale(Math.cos(azimuth)).add(up.scale(Math.sin(azimuth)));
+  const spreadDirection = normalized.scale(Math.cos(deviationRadians))
+    .add(radial.scale(Math.sin(deviationRadians)))
+    .normalize();
+  return {
+    direction: spreadDirection,
+    deviationDegrees: deviationRadians * 180 / Math.PI,
+  };
 }
 
 /** Low-root trajectory that passes through the selected armor height. */
@@ -217,4 +246,8 @@ class Shell {
 
 function toEventVector(vector: EventVector3): EventVector3 {
   return Object.freeze({ x: vector.x, y: vector.y, z: vector.z });
+}
+
+function clamp(value: number, minimum: number, maximum: number): number {
+  return Math.min(Math.max(value, minimum), maximum);
 }
