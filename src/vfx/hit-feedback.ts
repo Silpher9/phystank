@@ -7,7 +7,7 @@ import { MeshBuilder } from "@babylonjs/core/Meshes/meshBuilder";
 import type { Scene } from "@babylonjs/core/scene";
 import { HitOutcome, type Vector3 as EventVector3 } from "../core/ballistics";
 import type { GameEventBus, GameEvents } from "../core/events";
-import { HitCategory, ObjectHitOutcome } from "../core/impacts";
+import { ObjectHitOutcome } from "../core/impacts";
 
 type DebrisMotion = "INWARD" | "DROP" | "OUTWARD" | "NONE";
 
@@ -50,12 +50,30 @@ export const TRACER_TUNING = {
   ricochetFadeSeconds: 0.22,
 } as const;
 
+export const IMPACT_VFX_TUNING = {
+  shotShakeStrength: 0.025,
+  shotShakeSeconds: 0.025,
+  minimumImpactShakeStrength: 0.035,
+  coreLifetimeSeconds: 0.055,
+  debrisDelaySeconds: { minimum: 0.015, maximum: 0.045 },
+  dustDelaySeconds: { minimum: 0.05, maximum: 0.12 },
+  dustLifetimeSeconds: { minimum: 0.9, maximum: 1.45 },
+  smokeDelaySeconds: { minimum: 0.09, maximum: 0.16 },
+  smokeLifetimeSeconds: { minimum: 1.5, maximum: 2.3 },
+  dustAlpha: 0.3,
+  groundDebrisCount: 9,
+  groundDustCount: 8,
+} as const;
+
+const GROUND_TARGET_ID = "arena-ground";
+
 type MovingEffect = {
   mesh: Mesh;
   material: StandardMaterial;
   velocity: Vector3;
   gravity: number;
   lifetime: number;
+  delay: number;
   age: number;
   growth: number;
   initialScale: Vector3;
@@ -109,17 +127,22 @@ export class HitFeedbackSystem {
 
     for (let index = this.transients.length - 1; index >= 0; index--) {
       const effect = this.transients[index];
+      const previousAge = effect.age;
       effect.age += deltaSeconds;
-      if (effect.age >= effect.lifetime) {
+      if (effect.age >= effect.delay + effect.lifetime) {
         effect.mesh.dispose();
         effect.material.dispose();
         this.transients.splice(index, 1);
         continue;
       }
 
-      effect.mesh.position.addInPlace(effect.velocity.scale(deltaSeconds));
-      effect.velocity.y -= effect.gravity * deltaSeconds;
-      const progress = effect.age / effect.lifetime;
+      const activeAge = effect.age - effect.delay;
+      if (activeAge <= 0) continue;
+      effect.mesh.setEnabled(true);
+      const activeDelta = Math.min(deltaSeconds, activeAge, effect.age - previousAge);
+      effect.mesh.position.addInPlace(effect.velocity.scale(activeDelta));
+      effect.velocity.y -= effect.gravity * activeDelta;
+      const progress = activeAge / effect.lifetime;
       effect.mesh.visibility = Math.min(1, (1 - progress) * 2.5);
       effect.mesh.scaling.copyFrom(effect.initialScale.scale(1 + effect.growth * progress));
       if (effect.emissiveStart && effect.emissiveEnd) {
@@ -157,7 +180,10 @@ export class HitFeedbackSystem {
       direction,
       SHOT_FLASH_TUNING.dustCount,
     );
-    this.addShake(0.11, 0.09);
+    this.addShake(
+      IMPACT_VFX_TUNING.shotShakeStrength,
+      IMPACT_VFX_TUNING.shotShakeSeconds,
+    );
     this.setCue("FIRE", "shot");
   }
 
@@ -166,14 +192,21 @@ export class HitFeedbackSystem {
     const normal = toVector3(event.normal).normalize();
     const profile = HIT_EFFECT_PROFILES[event.outcome];
 
+    this.spawnImpactCore(point, normal, event.outcome);
     if (profile.mark) this.spawnImpactMark(point, normal);
     if (profile.debris !== "NONE") {
       this.spawnDebris(point, normal, profile.debris, profile.debrisCount);
     }
-    this.spawnDust(point, normal, profile.dustCount);
+    this.spawnDust(point, normal, profile.dustCount, true);
     if (event.outcome === HitOutcome.PENETRATION) this.spawnSmoke(point, normal, 6);
 
-    this.addShake(event.outcome === HitOutcome.PENETRATION ? 0.08 : 0.045, 0.08);
+    this.addShake(
+      Math.max(
+        IMPACT_VFX_TUNING.minimumImpactShakeStrength,
+        event.outcome === HitOutcome.PENETRATION ? 0.08 : 0.045,
+      ),
+      0.08,
+    );
     this.setCue(
       `${profile.hud} · ${event.facetId} · ${Math.round(event.impactAngleDegrees)}°`,
       event.outcome.toLowerCase(),
@@ -184,19 +217,35 @@ export class HitFeedbackSystem {
     const point = toVector3(event.point);
     const normal = toVector3(event.normal).normalize();
 
-    if (event.outcome === ObjectHitOutcome.DESTROYED) {
+    this.spawnImpactCore(point, normal, event.outcome);
+    if (event.targetId === GROUND_TARGET_ID) {
+      this.spawnDebris(
+        point,
+        normal,
+        "OUTWARD",
+        IMPACT_VFX_TUNING.groundDebrisCount,
+        Color3.FromHexString("#554838"),
+      );
+      this.spawnDust(
+        point,
+        normal,
+        IMPACT_VFX_TUNING.groundDustCount,
+        true,
+      );
+      this.setCue("GROUND IMPACT", "ground");
+    } else if (event.outcome === ObjectHitOutcome.DESTROYED) {
       this.spawnDebris(point, normal, "OUTWARD", 10, Color3.FromHexString("#6f4d2f"));
-      this.spawnDust(point, normal, 6);
+      this.spawnDust(point, normal, 6, true);
       this.setCue("COVER DESTROYED", "destroyed");
     } else if (event.outcome === ObjectHitOutcome.STOPPED) {
       this.spawnDebris(point, normal, "DROP", 5, Color3.FromHexString("#5d5b52"));
-      this.spawnDust(point, normal, 5);
+      this.spawnDust(point, normal, 5, true);
       this.setCue("HARD IMPACT", "shatter");
     } else {
-      this.spawnDust(point, normal, 2);
+      this.spawnDust(point, normal, 2, true);
       this.setCue("RICOCHET", "ricochet");
     }
-    this.addShake(0.035, 0.06);
+    this.addShake(IMPACT_VFX_TUNING.minimumImpactShakeStrength, 0.06);
   }
 
   private onRicochet(event: GameEvents["RICOCHET"]): void {
@@ -237,6 +286,32 @@ export class HitFeedbackSystem {
       lifetime: SHOT_FLASH_TUNING.lifetime,
       gravity: 0,
       growth: 0.3,
+    });
+  }
+
+  private spawnImpactCore(
+    point: Vector3,
+    normal: Vector3,
+    outcome: HitOutcome | ObjectHitOutcome,
+  ): void {
+    const color = outcome === HitOutcome.PENETRATION
+      ? Color3.FromHexString("#c1793f")
+      : outcome === HitOutcome.RICOCHET || outcome === ObjectHitOutcome.RICOCHET
+        ? Color3.FromHexString("#d0924e")
+        : Color3.FromHexString("#8b7758");
+    const mesh = MeshBuilder.CreateSphere("impact-core", {
+      diameter: this.range(0.15, 0.22),
+      segments: 4,
+    }, this.scene);
+    mesh.position.copyFrom(point.add(normal.scale(0.075)));
+    this.addTransient(mesh, {
+      color,
+      emissive: true,
+      emissiveEnd: color.scale(0.18),
+      velocity: normal.scale(0.08),
+      lifetime: IMPACT_VFX_TUNING.coreLifetimeSeconds,
+      gravity: 0,
+      growth: 0.8,
     });
   }
 
@@ -282,13 +357,22 @@ export class HitFeedbackSystem {
         color,
         velocity,
         lifetime: this.range(0.35, 0.65),
+        delay: this.range(
+          IMPACT_VFX_TUNING.debrisDelaySeconds.minimum,
+          IMPACT_VFX_TUNING.debrisDelaySeconds.maximum,
+        ),
         gravity: 7,
         growth: -0.15,
       });
     }
   }
 
-  private spawnDust(point: Vector3, direction: Vector3, count: number): void {
+  private spawnDust(
+    point: Vector3,
+    direction: Vector3,
+    count: number,
+    lingering = false,
+  ): void {
     const surfaceOffset = direction.lengthSquared() > 0
       ? direction.normalizeToNew().scale(0.07)
       : Vector3.Zero();
@@ -298,12 +382,27 @@ export class HitFeedbackSystem {
       const mesh = MeshBuilder.CreateSphere("impact-dust", { diameter: this.range(0.2, 0.38), segments: 4 }, this.scene);
       mesh.position.copyFrom(point.add(surfaceOffset).add(this.randomVector(0.08)));
       this.addTransient(mesh, {
-        color: Color3.FromHexString("#736957"),
-        alpha: 0.36,
+        color: Color3.Lerp(
+          Color3.FromHexString("#575044"),
+          Color3.FromHexString("#756b58"),
+          this.random(),
+        ),
+        alpha: IMPACT_VFX_TUNING.dustAlpha,
         velocity,
-        lifetime: this.range(0.45, 0.8),
+        lifetime: lingering
+          ? this.range(
+            IMPACT_VFX_TUNING.dustLifetimeSeconds.minimum,
+            IMPACT_VFX_TUNING.dustLifetimeSeconds.maximum,
+          )
+          : this.range(0.45, 0.8),
+        delay: lingering
+          ? this.range(
+            IMPACT_VFX_TUNING.dustDelaySeconds.minimum,
+            IMPACT_VFX_TUNING.dustDelaySeconds.maximum,
+          )
+          : 0,
         gravity: 0.25,
-        growth: 2.6,
+        growth: lingering ? 3.1 : 2.6,
       });
     }
   }
@@ -316,7 +415,14 @@ export class HitFeedbackSystem {
         color: Color3.FromHexString("#3d3c38"),
         alpha: 0.38,
         velocity: normal.scale(this.range(0.12, 0.35)).add(new Vector3(this.range(-0.12, 0.12), this.range(0.35, 0.8), this.range(-0.12, 0.12))),
-        lifetime: this.range(0.8, 1.2),
+        lifetime: this.range(
+          IMPACT_VFX_TUNING.smokeLifetimeSeconds.minimum,
+          IMPACT_VFX_TUNING.smokeLifetimeSeconds.maximum,
+        ),
+        delay: this.range(
+          IMPACT_VFX_TUNING.smokeDelaySeconds.minimum,
+          IMPACT_VFX_TUNING.smokeDelaySeconds.maximum,
+        ),
         gravity: 0,
         growth: 2.5,
       });
@@ -349,6 +455,7 @@ export class HitFeedbackSystem {
       emissiveEnd?: Color3;
       velocity: Vector3;
       lifetime: number;
+      delay?: number;
       gravity: number;
       growth: number;
     }>,
@@ -363,12 +470,15 @@ export class HitFeedbackSystem {
     }
     mesh.material = material;
     mesh.isPickable = false;
+    const delay = options.delay ?? 0;
+    if (delay > 0) mesh.setEnabled(false);
     this.transients.push({
       mesh,
       material,
       velocity: options.velocity,
       gravity: options.gravity,
       lifetime: options.lifetime,
+      delay,
       age: 0,
       growth: options.growth,
       initialScale: mesh.scaling.clone(),

@@ -1,11 +1,15 @@
 import { NullEngine } from "@babylonjs/core/Engines/nullEngine";
+import { Vector3 } from "@babylonjs/core/Maths/math.vector";
 import { Scene } from "@babylonjs/core/scene";
 import { describe, expect, it } from "vitest";
 import { HitOutcome } from "../core/ballistics";
 import { GameEventBus } from "../core/events";
+import { HitCategory, ObjectHitOutcome } from "../core/impacts";
+import { SHELL_TUNING } from "../shells";
 import { createPlayerCamera } from "../camera";
 import {
   HIT_EFFECT_PROFILES,
+  IMPACT_VFX_TUNING,
   SHOT_FLASH_TUNING,
   TRACER_TUNING,
   HitFeedbackSystem,
@@ -25,6 +29,151 @@ describe("gritty hit feedback", () => {
       mark: false,
       debris: "DROP",
     });
+  });
+
+  it("stages core, debris, and lingering dust on distinct impact timescales", () => {
+    const engine = new NullEngine();
+    const scene = new Scene(engine);
+    const camera = createPlayerCamera(scene);
+    const events = new GameEventBus();
+    const feedback = new HitFeedbackSystem(scene, camera, events, null, {
+      random: () => 0.5,
+    });
+
+    events.emit("HIT", {
+      shellId: "layered-impact",
+      tank: "target",
+      outcome: HitOutcome.SHATTER,
+      facetId: "FRONT",
+      point: { x: 0, y: 1.2, z: -12 },
+      normal: { x: 0, y: 0, z: 1 },
+      incoming: { x: 0, y: 0, z: -1 },
+      impactAngleDegrees: 0,
+      nominalThickness: 100,
+      effectiveThickness: 100,
+      penetration: 75,
+    });
+
+    expect(meshesNamed(scene, "impact-core")).toHaveLength(1);
+    expect(meshesNamed(scene, "impact-core")[0].isEnabled()).toBe(true);
+    expect(meshesNamed(scene, "impact-fragment")).toHaveLength(8);
+    expect(meshesNamed(scene, "impact-fragment").every((mesh) => !mesh.isEnabled())).toBe(true);
+    expect(meshesNamed(scene, "impact-dust")).toHaveLength(5);
+    expect(meshesNamed(scene, "impact-dust").every((mesh) => !mesh.isEnabled())).toBe(true);
+
+    feedback.update(0.035);
+    expect(meshesNamed(scene, "impact-core")).toHaveLength(1);
+    expect(meshesNamed(scene, "impact-fragment").every((mesh) => mesh.isEnabled())).toBe(true);
+    expect(meshesNamed(scene, "impact-dust").every((mesh) => !mesh.isEnabled())).toBe(true);
+
+    feedback.update(0.055);
+    expect(meshesNamed(scene, "impact-core")).toHaveLength(0);
+    expect(meshesNamed(scene, "impact-dust").every((mesh) => mesh.isEnabled())).toBe(true);
+    feedback.update(0.9);
+    expect(meshesNamed(scene, "impact-dust")).toHaveLength(5);
+    feedback.update(0.4);
+    expect(meshesNamed(scene, "impact-dust")).toHaveLength(0);
+
+    feedback.dispose();
+    scene.dispose();
+    engine.dispose();
+  });
+
+  it("throws an earthy layered burst for a ground miss", () => {
+    const engine = new NullEngine();
+    const scene = new Scene(engine);
+    const camera = createPlayerCamera(scene);
+    const events = new GameEventBus();
+    const feedback = new HitFeedbackSystem(scene, camera, events, null, {
+      random: () => 0.5,
+    });
+
+    events.emit("OBJECT_HIT", {
+      targetId: "arena-ground",
+      category: HitCategory.HARD,
+      outcome: ObjectHitOutcome.STOPPED,
+      point: { x: 2, y: 0, z: -4 },
+      normal: { x: 0, y: 1, z: 0 },
+      incoming: { x: 0, y: -0.2, z: -0.98 },
+      impactAngleDegrees: 78,
+    });
+
+    expect(feedback.lastCue).toBe("ground");
+    expect(meshesNamed(scene, "impact-fragment")).toHaveLength(
+      IMPACT_VFX_TUNING.groundDebrisCount,
+    );
+    expect(meshesNamed(scene, "impact-dust")).toHaveLength(
+      IMPACT_VFX_TUNING.groundDustCount,
+    );
+
+    feedback.dispose();
+    scene.dispose();
+    engine.dispose();
+  });
+
+  it("fits the feedback layers to realistic shell travel time", () => {
+    const travelAt12 = 12 / SHELL_TUNING.speed;
+    const travelAt20 = 20 / SHELL_TUNING.speed;
+    const travelAt40 = 40 / SHELL_TUNING.speed;
+
+    expect(travelAt12).toBeCloseTo(0.020, 3);
+    expect(travelAt20).toBeCloseTo(0.034, 3);
+    expect(travelAt40).toBeCloseTo(0.068, 3);
+    expect(IMPACT_VFX_TUNING.shotShakeSeconds).toBeLessThan(travelAt20);
+    expect(IMPACT_VFX_TUNING.debrisDelaySeconds.maximum).toBeLessThan(
+      IMPACT_VFX_TUNING.dustDelaySeconds.minimum,
+    );
+    expect(IMPACT_VFX_TUNING.dustLifetimeSeconds.minimum).toBeGreaterThanOrEqual(0.9);
+    expect(IMPACT_VFX_TUNING.dustAlpha).toBeLessThanOrEqual(0.3);
+    expect(IMPACT_VFX_TUNING.smokeLifetimeSeconds.minimum).toBeGreaterThanOrEqual(1.5);
+  });
+
+  it("anchors flash and trail at a downward-tilted muzzle", () => {
+    const engine = new NullEngine();
+    const scene = new Scene(engine);
+    const camera = createPlayerCamera(scene);
+    const events = new GameEventBus();
+    const feedback = new HitFeedbackSystem(scene, camera, events, null, {
+      random: () => 0.5,
+    });
+    const muzzle = new Vector3(3, 2.1, -1);
+    const depression = 8 * Math.PI / 180;
+    const direction = new Vector3(0, -Math.sin(depression), -Math.cos(depression));
+
+    events.emit("SHOT_FIRED", {
+      shellId: "depressed-shot",
+      tank: "player",
+      muzzlePosition: muzzle,
+      direction,
+      spreadDegrees: 0,
+      deviationDegrees: 0,
+    });
+    events.emit("SHELL_MOVED", {
+      shellId: "depressed-shot",
+      position: muzzle.add(direction.scale(12)),
+    });
+
+    const flashCore = scene.getMeshByName("muzzle-flash-core");
+    const flashBurst = scene.getMeshByName("muzzle-flash-burst");
+    expect(flashCore).not.toBeNull();
+    expect(flashBurst).not.toBeNull();
+    const coreOffset = flashCore!.position.subtract(muzzle);
+    const burstOffset = flashBurst!.position.subtract(muzzle);
+    expect(Vector3.Dot(coreOffset.normalizeToNew(), direction)).toBeCloseTo(1);
+    expect(coreOffset.length()).toBeCloseTo(SHOT_FLASH_TUNING.axialLength * 0.35);
+    expect(Vector3.Dot(burstOffset.normalizeToNew(), direction)).toBeCloseTo(1);
+    expect(burstOffset.length()).toBeCloseTo(0.08);
+
+    const tracer = scene.getMeshByName("tracer-depressed-shot");
+    expect(tracer).not.toBeNull();
+    tracer!.computeWorldMatrix(true);
+    const bounds = tracer!.getBoundingInfo().boundingBox;
+    expect(bounds.maximumWorld.y).toBeGreaterThan(muzzle.y - 0.1);
+    expect(bounds.minimumWorld.y).toBeLessThan(muzzle.y - 1.5);
+
+    feedback.dispose();
+    scene.dispose();
+    engine.dispose();
   });
 
   it("holds the complete muzzle-to-impact trail after a one-frame shot", () => {
@@ -132,3 +281,7 @@ describe("gritty hit feedback", () => {
     engine.dispose();
   });
 });
+
+function meshesNamed(scene: Scene, name: string) {
+  return scene.meshes.filter((mesh) => mesh.name === name);
+}
