@@ -125,7 +125,7 @@ describe("shot recoil", () => {
     const restingBarrelZ = tank.cannon.position.z;
     const restingMuzzle = tank.muzzle.getAbsolutePosition();
 
-    shells.fire(tank, new Vector3(0, 0, -12));
+    shells.fire(tank);
 
     expect(tank.cannon.position.z).toBe(restingBarrelZ);
     expect(shots).toHaveLength(1);

@@ -10,8 +10,10 @@ import {
   ShellSystem,
   applyAimSpread,
   calculateBallisticVelocity,
+  getBarrelDirection,
   offsetRicochetOrigin,
 } from "./shells";
+import { GunElevationSystem } from "./tank/gun-elevation";
 import { createTank } from "./tank/tank";
 
 describe("ballistic aiming", () => {
@@ -48,21 +50,14 @@ describe("ballistic aiming", () => {
       color: Color3.White(),
     });
     scene.meshes.forEach((mesh) => mesh.computeWorldMatrix(true));
-    const target = new Vector3(0, 0, -12);
-    const origin = tank.muzzle.getAbsolutePosition();
-    const horizontal = target.subtract(origin);
-    horizontal.y = 0;
-    const distance = horizontal.length();
-    const ballistic = calculateBallisticVelocity(
-      origin,
-      horizontal.normalize(),
-      distance,
-      1.2,
-    )!.normalize();
+    const target = new Vector3(0, 1.2, -12);
+    const elevation = new GunElevationSystem(tank);
+    elevation.update(target);
+    const barrelDirection = getBarrelDirection(tank);
     const shots: GameEvents["SHOT_FIRED"][] = [];
     events.on("SHOT_FIRED", (event) => shots.push(event));
 
-    shells.fire(tank, target, 7);
+    shells.fire(tank, 7);
 
     expect(shots).toHaveLength(1);
     expect(shots[0].spreadDegrees).toBe(7);
@@ -72,7 +67,7 @@ describe("ballistic aiming", () => {
       shots[0].direction.y,
       shots[0].direction.z,
     );
-    const actualDeviation = Math.acos(Vector3.Dot(ballistic, fired)) * 180 / Math.PI;
+    const actualDeviation = Math.acos(Vector3.Dot(barrelDirection, fired)) * 180 / Math.PI;
     expect(actualDeviation).toBeCloseTo(7);
     scene.dispose();
     engine.dispose();

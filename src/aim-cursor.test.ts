@@ -1,6 +1,7 @@
 import { NullEngine } from "@babylonjs/core/Engines/nullEngine";
 import { Vector3 } from "@babylonjs/core/Maths/math.vector";
 import { Scene } from "@babylonjs/core/scene";
+import { LinesMesh } from "@babylonjs/core/Meshes/linesMesh";
 import { describe, expect, it } from "vitest";
 import {
   AIM_CURSOR_TUNING,
@@ -22,7 +23,7 @@ describe("aim cursor", () => {
     const scene = new Scene(engine);
     const cursor = new AimCursorSystem(scene);
     const origin = new Vector3(0, 2.37, 0);
-    const aimPoint = new Vector3(0, 0, -40);
+    const aimPoint = new Vector3(0, 1.4, -40);
 
     expect(cursor.visible).toBe(false);
     cursor.update(origin, aimPoint, 7);
@@ -32,7 +33,9 @@ describe("aim cursor", () => {
     expect(cursor.visible).toBe(true);
     expect(cursor.radius).toBeCloseTo(4.91, 2);
     expect(ring?.absolutePosition.x).toBeCloseTo(aimPoint.x);
-    expect(ring?.absolutePosition.y).toBeCloseTo(AIM_CURSOR_TUNING.elevation);
+    expect(ring?.absolutePosition.y).toBeCloseTo(
+      aimPoint.y + AIM_CURSOR_TUNING.elevation,
+    );
     expect(ring?.absolutePosition.z).toBeCloseTo(aimPoint.z);
     expect(ring?.scaling.x).toBeCloseTo(cursor.radius);
     expect(contrast?.scaling.x).toBeCloseTo(
@@ -52,6 +55,22 @@ describe("aim cursor", () => {
     cursor.update(origin, aimPoint, 0.25);
     expect(cursor.radius).toBeCloseTo(0.17, 2);
     expect(ring?.scaling.x).toBeLessThan(wideRadius);
+
+    const center = scene.getMeshByName("aim-cursor-center") as LinesMesh;
+    const reachableColor = center.color.clone();
+    const positionBeforeWarning = ring!.absolutePosition.clone();
+    const radiusBeforeWarning = cursor.radius;
+    cursor.update(origin, aimPoint, 0.25, false);
+    expect(cursor.reachable).toBe(false);
+    expect(cursor.radius).toBeCloseTo(radiusBeforeWarning);
+    expect(ring?.absolutePosition.equalsWithEpsilon(positionBeforeWarning)).toBe(true);
+    expect(center.rotation.y).toBeCloseTo(Math.PI / 4);
+    expect(center.color.equals(reachableColor)).toBe(false);
+
+    cursor.update(origin, aimPoint, 0.25, true);
+    expect(cursor.reachable).toBe(true);
+    expect(center.rotation.y).toBe(0);
+    expect(center.color.equals(reachableColor)).toBe(true);
 
     cursor.update(origin, null, 7);
     expect(cursor.visible).toBe(false);
