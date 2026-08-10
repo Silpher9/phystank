@@ -22,6 +22,7 @@ main,
   display: block;
   outline: none;
   touch-action: none;
+  cursor: none;
 }
 
 .loading {
