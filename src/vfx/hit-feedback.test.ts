@@ -38,6 +38,8 @@ describe("gritty hit feedback", () => {
       tank: "player",
       muzzlePosition: { x: 0, y: 2, z: 0 },
       direction: { x: 0, y: 0, z: -1 },
+      spreadDegrees: 0,
+      deviationDegrees: 0,
     });
     events.emit("SHELL_MOVED", {
       shellId: "test-shell",

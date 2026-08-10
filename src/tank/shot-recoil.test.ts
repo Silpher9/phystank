@@ -36,6 +36,8 @@ describe("shot recoil", () => {
       tank: tank.root.name,
       muzzlePosition: { x: 0, y: 2, z: -3 },
       direction: { x: 0, y: 0, z: -1 },
+      spreadDegrees: 0,
+      deviationDegrees: 0,
     });
     system.update(SHOT_RECOIL_TUNING.HULL_ATTACK_SECONDS);
     hullPose.apply();
@@ -77,6 +79,8 @@ describe("shot recoil", () => {
       tank: tank.root.name,
       muzzlePosition: { x: 0, y: 2, z: -3 },
       direction: { x: 0, y: 0, z: -1 },
+      spreadDegrees: 0,
+      deviationDegrees: 0,
     });
     system.update(SHOT_RECOIL_TUNING.ATTACK_SECONDS);
     tank.cannon.position.z += 0.2;

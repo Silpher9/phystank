@@ -40,13 +40,22 @@ describe("debug overlay", () => {
       position: Vector3.Zero(),
       color: Color3.White(),
     });
-    const overlay = new DebugOverlaySystem(scene, events, [tank]);
+    const aimElement = { textContent: "" } as HTMLElement;
+    const overlay = new DebugOverlaySystem(scene, events, [tank], {
+      panel: null,
+      facets: null,
+      aim: aimElement,
+      hit: null,
+    });
+    overlay.setAimSpreadDegrees(2.5);
 
     events.emit("SHOT_FIRED", {
       shellId: "shell-debug",
       tank: tank.root.name,
       muzzlePosition: { x: 0, y: 2, z: 0 },
       direction: { x: 0, y: 0, z: -1 },
+      spreadDegrees: 3,
+      deviationDegrees: 1.25,
     });
     events.emit("SHELL_MOVED", {
       shellId: "shell-debug",
@@ -95,6 +104,9 @@ describe("debug overlay", () => {
     expect(deflection?.isEnabled()).toBe(false);
     expect(overlay.toggle()).toBe(true);
     expect(overlay.enabled).toBe(true);
+    expect(aimElement.textContent).toContain("CURRENT SPREAD  2.50°");
+    expect(aimElement.textContent).toContain("LAST SHOT CONE 3.00°");
+    expect(aimElement.textContent).toContain("ACTUAL DEVIATION 1.25°");
     expect(normal?.isEnabled()).toBe(true);
     expect(path?.isEnabled()).toBe(true);
     expect(deflection?.isEnabled()).toBe(true);

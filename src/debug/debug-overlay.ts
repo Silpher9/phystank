@@ -24,6 +24,7 @@ const LOCAL_OUTWARD_NORMAL: Readonly<Record<ArmorFacetId, Vector3>> = {
 export type DebugOverlayElements = Readonly<{
   panel: HTMLElement | null;
   facets: HTMLElement | null;
+  aim: HTMLElement | null;
   hit: HTMLElement | null;
 }>;
 
@@ -43,12 +44,20 @@ export class DebugOverlaySystem {
   private latestShellId: string | null = null;
   private _enabled = false;
   private _lastHitSummary = "No armor hit yet";
+  private currentSpreadDegrees = 0;
+  private lastShotSpreadDegrees = 0;
+  private lastShotDeviationDegrees = 0;
 
   constructor(
     private readonly scene: Scene,
     events: GameEventBus,
     private readonly tanks: readonly TankEntity[],
-    private readonly elements: DebugOverlayElements = { panel: null, facets: null, hit: null },
+    private readonly elements: DebugOverlayElements = {
+      panel: null,
+      facets: null,
+      aim: null,
+      hit: null,
+    },
   ) {
     tanks.forEach((tank, tankIndex) => {
       const color = tankIndex === 0
@@ -103,6 +112,10 @@ export class DebugOverlaySystem {
     return this.deflectionMarkers.length;
   }
 
+  setAimSpreadDegrees(spreadDegrees: number): void {
+    this.currentSpreadDegrees = spreadDegrees;
+  }
+
   toggle(): boolean {
     this.setEnabled(!this._enabled);
     return this._enabled;
@@ -143,6 +156,13 @@ export class DebugOverlaySystem {
       );
     }
     if (this.elements.facets) this.elements.facets.textContent = facetText.join("\n");
+    if (this.elements.aim) {
+      this.elements.aim.textContent = [
+        `CURRENT SPREAD  ${this.currentSpreadDegrees.toFixed(2)}°`,
+        `LAST SHOT CONE ${this.lastShotSpreadDegrees.toFixed(2)}°`,
+        `ACTUAL DEVIATION ${this.lastShotDeviationDegrees.toFixed(2)}°`,
+      ].join("\n");
+    }
   }
 
   dispose(): void {
@@ -159,6 +179,8 @@ export class DebugOverlaySystem {
     this.clearPath();
     this.latestShellId = event.shellId;
     this.pathPoints = [toVector3(event.muzzlePosition)];
+    this.lastShotSpreadDegrees = event.spreadDegrees;
+    this.lastShotDeviationDegrees = event.deviationDegrees;
   }
 
   private extendPath(event: GameEvents["SHELL_MOVED"]): void {

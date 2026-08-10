@@ -18,6 +18,7 @@ import { ShotRecoilSystem } from "./tank/shot-recoil";
 import { HullPoseComposer } from "./tank/hull-pose";
 import { DrivingSuspensionSystem } from "./tank/driving-suspension";
 import { HitSuspensionSystem } from "./tank/hit-suspension";
+import { AimConvergenceSystem } from "./tank/aim-convergence";
 import "./styles.css";
 
 const canvas = document.querySelector<HTMLCanvasElement>("#game-canvas");
@@ -39,6 +40,7 @@ const gameEvents = new GameEventBus();
 const debugOverlay = new DebugOverlaySystem(scene, gameEvents, tanks, {
   panel: document.querySelector<HTMLElement>("#debug-overlay"),
   facets: document.querySelector<HTMLElement>("#debug-facets"),
+  aim: document.querySelector<HTMLElement>("#debug-aim"),
   hit: document.querySelector<HTMLElement>("#debug-hit"),
 });
 const hitFeedback = new HitFeedbackSystem(
@@ -48,6 +50,7 @@ const hitFeedback = new HitFeedbackSystem(
   document.querySelector<HTMLElement>("#hit-status"),
 );
 const shellSystem = new ShellSystem(scene, gameEvents);
+const aimConvergence = new AimConvergenceSystem(gameEvents);
 const playerHullPose = new HullPoseComposer(playerTank);
 const hullPoseTargets = tanks.map((tank) => ({
   tank,
@@ -60,11 +63,15 @@ const drivingSuspension = new DrivingSuspensionSystem(gameEvents, playerHullPose
 const hitSuspension = new HitSuspensionSystem(gameEvents, hullPoseTargets);
 const playerController = createPlayerController(scene, canvas, playerTank, gameEvents, () => {
   const target = playerController.aimPoint;
-  if (target) shellSystem.fire(playerTank, target);
+  if (target) shellSystem.fire(playerTank, target, aimConvergence.currentSpreadDegrees);
 });
 engine.runRenderLoop(() => {
   const deltaSeconds = engine.getDeltaTime() / 1000;
   playerController.update(deltaSeconds, readDriveInput());
+  aimConvergence.update(deltaSeconds, {
+    turretYawRadians: playerTank.turret.rotation.y,
+    aimPoint: playerController.aimPoint,
+  });
   drivingSuspension.update(deltaSeconds);
   shotRecoil.update(deltaSeconds);
   hitSuspension.update(deltaSeconds);
@@ -72,6 +79,7 @@ engine.runRenderLoop(() => {
   followPlayer(camera, playerTank.root.position);
   shellSystem.update(deltaSeconds);
   hitFeedback.update(deltaSeconds);
+  debugOverlay.setAimSpreadDegrees(aimConvergence.currentSpreadDegrees);
   debugOverlay.update();
   updateReloadHud(playerController);
   scene.render();
