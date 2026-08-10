@@ -9,10 +9,57 @@ import { GameEventBus, type GameEvents } from "./core/events";
 import { HitCategory, ObjectHitOutcome } from "./core/impacts";
 import { DebugOverlaySystem } from "./debug/debug-overlay";
 import { registerHitTarget } from "./hit-targets";
-import { ShellSystem } from "./shells";
+import { SHELL_TUNING, ShellSystem } from "./shells";
 import { createTank } from "./tank/tank";
 
 describe("shell integration", () => {
+  it("raycasts the full 587 u/s frame segment through thin geometry", () => {
+    const engine = new NullEngine();
+    const scene = new Scene(engine);
+    const events = new GameEventBus();
+    const objectHits: GameEvents["OBJECT_HIT"][] = [];
+    const movements: GameEvents["SHELL_MOVED"][] = [];
+    const shells = new ShellSystem(scene, events);
+    events.on("OBJECT_HIT", (event) => objectHits.push(event));
+    events.on("SHELL_MOVED", (event) => movements.push(event));
+    const player = createTank(scene, {
+      name: "high-speed-player",
+      profile: "BRAWLER",
+      position: new Vector3(0, 0, 6),
+      color: Color3.White(),
+    });
+    scene.meshes.forEach((mesh) => mesh.computeWorldMatrix(true));
+    const muzzle = player.muzzle.getAbsolutePosition();
+    const distancePerFrame = SHELL_TUNING.speed / 60;
+    const plate = MeshBuilder.CreateBox(
+      "high-speed-thin-plate",
+      { width: 4, height: 4, depth: 0.04 },
+      scene,
+    );
+    plate.position.set(muzzle.x, 1.8, muzzle.z - distancePerFrame * 0.75);
+    registerHitTarget(plate, {
+      category: HitCategory.HARD,
+      targetId: plate.name,
+      equivalentArmor: 400,
+    });
+    plate.computeWorldMatrix(true);
+
+    shells.fire(player, muzzle.add(new Vector3(0, 0, -20)));
+    shells.update(1 / 60);
+
+    expect(SHELL_TUNING.speed).toBe(587);
+    expect(distancePerFrame).toBeCloseTo(9.78, 2);
+    expect(distancePerFrame / 0.04).toBeGreaterThan(200);
+    expect(objectHits).toEqual([
+      expect.objectContaining({
+        targetId: plate.name,
+        outcome: ObjectHitOutcome.STOPPED,
+      }),
+    ]);
+    expect(movements.at(-1)?.position.z).toBeCloseTo(plate.position.z + 0.02, 1);
+    scene.dispose(); engine.dispose();
+  });
+
   it("scores a hit outcome when firing at the target tank at demo range", () => {
     const engine = new NullEngine();
     const scene = new Scene(engine);

@@ -1,9 +1,6 @@
 import { Ray } from "@babylonjs/core/Culling/ray";
-import { Color3 } from "@babylonjs/core/Maths/math.color";
 import { Vector3 } from "@babylonjs/core/Maths/math.vector";
-import { MeshBuilder } from "@babylonjs/core/Meshes/meshBuilder";
 import type { Scene } from "@babylonjs/core/scene";
-import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
 import type { Vector3 as EventVector3 } from "./core/ballistics";
 import type { GameEventBus } from "./core/events";
 import { resolveImpact } from "./core/impacts";
@@ -12,15 +9,15 @@ import { getHitNormalFromPick, getHitTarget } from "./hit-targets";
 import type { TankEntity } from "./tank/tank";
 
 export const RICOCHET_EPSILON = 0.02;
-const TUNING = {
-  speed: 45,
+export const SHELL_TUNING = {
+  speed: 587,
   gravity: 9.81,
   lifetime: 4,
   arenaLimit: ARENA_SIZE / 2 + WALL_THICKNESS,
   caliber: 75,
   penetration: 150,
   targetHeight: 1.2,
-};
+} as const;
 
 export function offsetRicochetOrigin(hitPoint: Vector3, normal: Vector3): Vector3 {
   return hitPoint.add(normal.scale(RICOCHET_EPSILON));
@@ -41,7 +38,12 @@ export class ShellSystem {
     if (horizontal.lengthSquared() < 0.01) return;
     const distance = horizontal.length();
     const direction = horizontal.normalize();
-    const ballisticVelocity = calculateBallisticVelocity(origin, direction, distance, TUNING.targetHeight);
+    const ballisticVelocity = calculateBallisticVelocity(
+      origin,
+      direction,
+      distance,
+      SHELL_TUNING.targetHeight,
+    );
     if (!ballisticVelocity) return;
     const spread = applyAimSpread(ballisticVelocity, spreadDegrees, this.random);
     const velocity = spread.direction.scale(ballisticVelocity.length());
@@ -54,7 +56,7 @@ export class ShellSystem {
       spreadDegrees: Math.max(0, spreadDegrees),
       deviationDegrees: spread.deviationDegrees,
     });
-    this.shells.push(new Shell(shellId, this.scene, this.events, owner, origin, velocity, TUNING.penetration, 0));
+    this.shells.push(new Shell(shellId, this.scene, this.events, owner, origin, velocity, SHELL_TUNING.penetration, 0));
   }
 
   update(deltaSeconds: number): void {
@@ -90,16 +92,15 @@ export function applyAimSpread(
 
 /** Low-root trajectory that passes through the selected armor height. */
 export function calculateBallisticVelocity(origin: Vector3, horizontalDirection: Vector3, distance: number, targetHeight: number): Vector3 | null {
-  const speedSquared = TUNING.speed ** 2;
+  const speedSquared = SHELL_TUNING.speed ** 2;
   const heightDifference = targetHeight - origin.y;
-  const discriminant = speedSquared ** 2 - TUNING.gravity * (TUNING.gravity * distance ** 2 + 2 * heightDifference * speedSquared);
+  const discriminant = speedSquared ** 2 - SHELL_TUNING.gravity * (SHELL_TUNING.gravity * distance ** 2 + 2 * heightDifference * speedSquared);
   if (discriminant < 0 || distance <= 0) return null;
-  const angle = Math.atan((speedSquared - Math.sqrt(discriminant)) / (TUNING.gravity * distance));
-  return horizontalDirection.scale(Math.cos(angle) * TUNING.speed).add(new Vector3(0, Math.sin(angle) * TUNING.speed, 0));
+  const angle = Math.atan((speedSquared - Math.sqrt(discriminant)) / (SHELL_TUNING.gravity * distance));
+  return horizontalDirection.scale(Math.cos(angle) * SHELL_TUNING.speed).add(new Vector3(0, Math.sin(angle) * SHELL_TUNING.speed, 0));
 }
 
 class Shell {
-  private readonly mesh;
   private age = 0;
   private firstSegment = true;
   constructor(
@@ -111,18 +112,11 @@ class Shell {
     private velocity: Vector3,
     private penetration: number,
     private ricochets: number,
-  ) {
-    this.mesh = MeshBuilder.CreateSphere("shell", { diameter: 0.14 }, scene);
-    this.mesh.position.copyFrom(position);
-    this.mesh.isPickable = false;
-    const material = new StandardMaterial("shell-material", scene);
-    material.emissiveColor = Color3.FromHexString("#ffdc75");
-    this.mesh.material = material;
-  }
+  ) {}
 
   update(dt: number): boolean {
     this.age += dt;
-    this.velocity.y -= TUNING.gravity * dt;
+    this.velocity.y -= SHELL_TUNING.gravity * dt;
     const next = this.position.add(this.velocity.scale(dt));
     const segment = next.subtract(this.position);
     const length = segment.length();
@@ -142,7 +136,7 @@ class Shell {
           facetNormal: normal,
           speed: this.velocity.length(),
           penetration: this.penetration,
-          shellCaliber: TUNING.caliber,
+          shellCaliber: SHELL_TUNING.caliber,
           ricochetCount: this.ricochets,
         });
         if (result.action === "IGNORE") {
@@ -222,7 +216,6 @@ class Shell {
 
   private moveTo(position: Vector3): void {
     this.position = position;
-    this.mesh.position.copyFrom(position);
     this.events.emit("SHELL_MOVED", {
       shellId: this.id,
       position: toEventVector(position),
@@ -234,12 +227,11 @@ class Shell {
       shellId: this.id,
       position: toEventVector(this.position),
     });
-    this.mesh.dispose();
     return false;
   }
 
   private continueWithinBounds(): boolean {
-    const withinBounds = this.age < TUNING.lifetime && Math.abs(this.position.x) < TUNING.arenaLimit && Math.abs(this.position.z) < TUNING.arenaLimit && this.position.y > -2;
+    const withinBounds = this.age < SHELL_TUNING.lifetime && Math.abs(this.position.x) < SHELL_TUNING.arenaLimit && Math.abs(this.position.z) < SHELL_TUNING.arenaLimit && this.position.y > -2;
     return withinBounds || this.dispose();
   }
 }

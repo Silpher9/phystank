@@ -42,6 +42,14 @@ export const SHOT_FLASH_TUNING = {
   dustCount: 7,
 } as const;
 
+export const TRACER_TUNING = {
+  radius: 0.035,
+  impactHoldSeconds: 0.08,
+  impactFadeSeconds: 0.18,
+  ricochetHoldSeconds: 0.16,
+  ricochetFadeSeconds: 0.22,
+} as const;
+
 type MovingEffect = {
   mesh: Mesh;
   material: StandardMaterial;
@@ -142,7 +150,7 @@ export class HitFeedbackSystem {
   private onShotFired(event: GameEvents["SHOT_FIRED"]): void {
     const position = toVector3(event.muzzlePosition);
     const direction = toVector3(event.direction).normalize();
-    this.tracers.set(event.shellId, new Tracer(this.scene, event.shellId, position, direction));
+    this.tracers.set(event.shellId, new Tracer(this.scene, event.shellId, position));
     this.spawnFlash(position, direction);
     this.spawnDust(
       new Vector3(position.x, 0.12, position.z),
@@ -194,6 +202,7 @@ export class HitFeedbackSystem {
   private onRicochet(event: GameEvents["RICOCHET"]): void {
     const point = toVector3(event.point);
     const outgoing = toVector3(event.outgoing).normalize();
+    this.tracers.get(event.shellId)?.markRicochet(point);
     this.spawnSparks(point, outgoing, 10);
     this.setCue("RICOCHET", "ricochet");
   }
@@ -417,55 +426,80 @@ export class HitFeedbackSystem {
   }
 }
 
+/** Records the whole simulated path so even a one-frame flight leaves a readable shot line. */
 class Tracer {
   private readonly points: Vector3[];
-  private readonly mesh: Mesh;
+  private mesh: Mesh | null = null;
   private readonly material: StandardMaterial;
+  private readonly name: string;
+  private isRicochet = false;
+  private holdRemaining: number | null = null;
   private fadeRemaining: number | null = null;
 
-  constructor(scene: Scene, shellId: string, position: Vector3, direction: Vector3) {
-    const pointCount = 12;
-    this.points = Array.from({ length: pointCount }, (_, index) => (
-      position.subtract(direction.scale((pointCount - 1 - index) * 0.065))
-    ));
-    this.mesh = MeshBuilder.CreateTube(`tracer-${shellId}`, {
-      path: this.points,
-      radius: 0.035,
-      tessellation: 4,
-      updatable: true,
-    }, scene);
-    this.mesh.isPickable = false;
+  constructor(
+    private readonly scene: Scene,
+    shellId: string,
+    position: Vector3,
+  ) {
+    this.name = `tracer-${shellId}`;
+    this.points = [position.clone()];
     this.material = new StandardMaterial(`tracer-${shellId}-material`, scene);
     this.material.disableLighting = true;
     this.material.diffuseColor = Color3.FromHexString("#6f3a21");
     this.material.emissiveColor = Color3.FromHexString("#9a572d");
-    this.mesh.material = this.material;
   }
 
   move(position: Vector3): void {
-    this.points.shift();
+    const last = this.points[this.points.length - 1];
+    if (Vector3.DistanceSquared(last, position) < 1e-8) return;
     this.points.push(position.clone());
-    MeshBuilder.CreateTube(this.mesh.name, {
+    this.rebuild();
+  }
+
+  markRicochet(point: Vector3): void {
+    this.move(point);
+    this.isRicochet = true;
+    this.material.diffuseColor = Color3.FromHexString("#a34c20");
+    this.material.emissiveColor = Color3.FromHexString("#ff9a3c");
+  }
+
+  private rebuild(): void {
+    this.mesh?.dispose(false, false);
+    this.mesh = MeshBuilder.CreateTube(this.name, {
       path: this.points,
-      instance: this.mesh,
-    });
+      radius: TRACER_TUNING.radius,
+      tessellation: 4,
+    }, this.scene);
+    this.mesh.isPickable = false;
+    this.mesh.material = this.material;
   }
 
   finish(): void {
-    this.fadeRemaining = 0.18;
+    this.holdRemaining = this.isRicochet
+      ? TRACER_TUNING.ricochetHoldSeconds
+      : TRACER_TUNING.impactHoldSeconds;
+    this.fadeRemaining = this.isRicochet
+      ? TRACER_TUNING.ricochetFadeSeconds
+      : TRACER_TUNING.impactFadeSeconds;
   }
 
   update(deltaSeconds: number): boolean {
-    if (this.fadeRemaining === null) return true;
-    this.fadeRemaining = Math.max(0, this.fadeRemaining - deltaSeconds);
-    this.mesh.visibility = this.fadeRemaining / 0.18;
+    if (this.holdRemaining === null || this.fadeRemaining === null) return true;
+    const fadeDelta = Math.max(0, deltaSeconds - this.holdRemaining);
+    this.holdRemaining = Math.max(0, this.holdRemaining - deltaSeconds);
+    if (this.holdRemaining > 0) return true;
+    const fadeDuration = this.isRicochet
+      ? TRACER_TUNING.ricochetFadeSeconds
+      : TRACER_TUNING.impactFadeSeconds;
+    this.fadeRemaining = Math.max(0, this.fadeRemaining - fadeDelta);
+    if (this.mesh) this.mesh.visibility = this.fadeRemaining / fadeDuration;
     if (this.fadeRemaining > 0) return true;
     this.dispose();
     return false;
   }
 
   dispose(): void {
-    this.mesh.dispose();
+    this.mesh?.dispose(false, false);
     this.material.dispose();
   }
 }
