@@ -1,6 +1,4 @@
 import { Engine } from "@babylonjs/core/Engines/engine";
-import { DirectionalLight } from "@babylonjs/core/Lights/directionalLight";
-import { HemisphericLight } from "@babylonjs/core/Lights/hemisphericLight";
 import { Color3, Color4 } from "@babylonjs/core/Maths/math.color";
 import { Vector3 } from "@babylonjs/core/Maths/math.vector";
 import { Scene } from "@babylonjs/core/scene";
@@ -22,6 +20,7 @@ import { AimConvergenceSystem } from "./tank/aim-convergence";
 import { AimCursorSystem } from "./aim-cursor";
 import { getHitTarget } from "./hit-targets";
 import { GunElevationSystem } from "./tank/gun-elevation";
+import { createSceneLighting } from "./scene-lighting";
 import "./styles.css";
 
 const canvas = document.querySelector<HTMLCanvasElement>("#game-canvas");
@@ -112,17 +111,7 @@ function createScene(engine: Engine): {
 
   const camera = createPlayerCamera(scene);
 
-  const sun = new DirectionalLight("angle-light", new Vector3(-0.55, -1, 0.35), scene);
-  sun.position = new Vector3(12, 20, -10);
-  sun.intensity = 2.4;
-  sun.diffuse = Color3.FromHexString("#ffe9bd");
-
-  const fill = new HemisphericLight("fill-light", new Vector3(0, 1, 0), scene);
-  fill.intensity = 0.28;
-  fill.diffuse = Color3.FromHexString("#afc7e6");
-  fill.groundColor = Color3.FromHexString("#1b211d");
-
-  createArena(scene);
+  const arenaMeshes = createArena(scene);
   const playerTank = createTank(scene, {
     name: "player-tank",
     profile: "BRAWLER",
@@ -137,6 +126,13 @@ function createScene(engine: Engine): {
     rotationY: -Math.PI * 0.78,
     color: Color3.FromHexString("#536d75"),
   });
+  const ground = arenaMeshes.find((mesh) => mesh.name === "arena-ground");
+  if (!ground) throw new Error("Arena ground is missing");
+  createSceneLighting(
+    scene,
+    ground,
+    scene.meshes.filter((mesh) => mesh !== ground),
+  );
   followPlayer(camera, playerTank.root.position);
   return { scene, playerTank, tanks: [playerTank, targetTank], camera };
 }
