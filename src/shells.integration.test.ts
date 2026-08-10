@@ -42,6 +42,8 @@ describe("shell integration", () => {
       expect.objectContaining({ shellId: shots[0].shellId }),
     ]);
     expect(hits.length).toBeGreaterThan(0);
+    expect(hits[0].tank).toBe(target.root.name);
+    expect(Math.hypot(hits[0].incoming.x, hits[0].incoming.y, hits[0].incoming.z)).toBeCloseTo(1);
     expect(Object.values(HitOutcome)).toContain(hits[0].outcome);
     expect(hits[0].facetId).toBeTruthy();
     expect(hits[0].impactAngleDegrees).toBeGreaterThanOrEqual(0);
@@ -150,6 +152,7 @@ describe("shell integration", () => {
       { targetId: "ricochet-chain-crate", outcome: ObjectHitOutcome.DESTROYED },
     ]);
     expect(ricochets).toHaveLength(1);
+    expect(ricochets[0].tank).toBeNull();
     expect(ricochets[0].outgoing.x).toBeGreaterThan(0);
     expect(crate.isDisposed()).toBe(true);
     scene.dispose(); engine.dispose();

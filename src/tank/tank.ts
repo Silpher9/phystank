@@ -123,36 +123,42 @@ export function createTank(scene: Scene, options: CreateTankOptions): TankEntity
       "FRONT",
       profile,
       createPlate(`${options.name}-front`, HULL_PLATE_LAYOUT.FRONT, root, armorMaterial, scene),
+      root.name,
       core,
     ),
     LEFT_SIDE: registerFacet(
       "LEFT_SIDE",
       profile,
       createPlate(`${options.name}-left-side`, HULL_PLATE_LAYOUT.LEFT_SIDE, root, armorMaterial, scene),
+      root.name,
       core,
     ),
     RIGHT_SIDE: registerFacet(
       "RIGHT_SIDE",
       profile,
       createPlate(`${options.name}-right-side`, HULL_PLATE_LAYOUT.RIGHT_SIDE, root, armorMaterial, scene),
+      root.name,
       core,
     ),
     REAR: registerFacet(
       "REAR",
       profile,
       createPlate(`${options.name}-rear`, HULL_PLATE_LAYOUT.REAR, root, armorMaterial, scene),
+      root.name,
       core,
     ),
     TURRET_FRONT: registerFacet(
       "TURRET_FRONT",
       profile,
       createPlate(`${options.name}-turret-front`, TURRET_FRONT_LAYOUT, turret, armorMaterial, scene),
+      root.name,
       core,
     ),
     ROOF: registerFacet(
       "ROOF",
       profile,
       createPlate(`${options.name}-roof`, HULL_PLATE_LAYOUT.ROOF, root, armorMaterial, scene),
+      root.name,
       core,
     ),
   } satisfies Record<ArmorFacetId, TankFacet>;
@@ -199,12 +205,14 @@ function registerFacet(
   id: ArmorFacetId,
   profile: ArmorProfile,
   mesh: AbstractMesh,
+  tankName: string,
   outwardOrigin: TransformNode,
 ): TankFacet {
   const facet = { id, thickness: profile.thicknessByFacet[id], mesh };
   registerHitTarget(mesh, {
     category: HitCategory.ARMOR,
     targetId: mesh.name,
+    tank: tankName,
     facetId: id,
     thickness: facet.thickness,
   }, outwardOrigin);
