@@ -41,6 +41,7 @@ describe("aim cursor", () => {
     expect(contrast?.scaling.x).toBeCloseTo(cursor.radius);
     const ringMaterial = ring?.material as GreasedLineSimpleMaterial;
     const contrastMaterial = contrast?.material as GreasedLineSimpleMaterial;
+    expect(AIM_CURSOR_TUNING.lineWidthPixels).toBeGreaterThanOrEqual(3);
     expect(ringMaterial.width).toBe(AIM_CURSOR_TUNING.lineWidthPixels);
     expect(contrastMaterial.width).toBe(AIM_CURSOR_TUNING.contrastWidthPixels);
     expect(contrastMaterial.width).toBeGreaterThan(ringMaterial.width);
