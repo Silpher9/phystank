@@ -49,7 +49,7 @@ export class AimConvergenceSystem {
     const hullMoving = Math.abs(this.speed) > AIM_CONVERGENCE_TUNING.MOTION_EPSILON
       || Math.abs(this.hullTurnRate) > AIM_CONVERGENCE_TUNING.MOTION_EPSILON
       || input.aimPoint === null;
-    let target = AIM_CONVERGENCE_TUNING.MIN_SPREAD_DEGREES;
+    let target: number = AIM_CONVERGENCE_TUNING.MIN_SPREAD_DEGREES;
     if (hullMoving) {
       target = AIM_CONVERGENCE_TUNING.MAX_SPREAD_DEGREES;
     } else if (turretTurned || aimPointMoved) {
