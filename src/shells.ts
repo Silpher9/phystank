@@ -128,10 +128,12 @@ class Shell {
 
         if (result.armorHit) this.events.emit("HIT", {
           shellId: this.id,
+          tank: result.armorHit.tank,
           outcome: result.armorHit.outcome,
           facetId: result.armorHit.facetId,
           point: toEventVector(pick.pickedPoint),
           normal: toEventVector(normal),
+          incoming: toEventVector(incoming),
           impactAngleDegrees: result.armorHit.impactAngleDegrees,
           nominalThickness: result.armorHit.nominalThickness,
           effectiveThickness: result.armorHit.effectiveThickness,
@@ -161,7 +163,9 @@ class Shell {
           const continuation = result.continuation;
           this.events.emit("RICOCHET", {
             shellId: this.id,
+            tank: result.armorHit?.tank ?? null,
             point: toEventVector(pick.pickedPoint),
+            normal: toEventVector(normal),
             incoming: toEventVector(incoming),
             outgoing: toEventVector(continuation.direction),
             retainedSpeed: continuation.speed,

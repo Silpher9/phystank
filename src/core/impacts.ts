@@ -23,6 +23,7 @@ export enum ObjectHitOutcome {
 export type ArmorHitTarget = Readonly<{
   category: HitCategory.ARMOR;
   targetId: string;
+  tank: string;
   facetId: ArmorFacetId;
   thickness: number;
 }>;
@@ -55,6 +56,7 @@ export type ImpactInput = Readonly<{
 export type ImpactResolution = Readonly<{
   action: "IGNORE" | "STOP" | "RICOCHET" | "PASS_THROUGH";
   armorHit?: Readonly<{
+    tank: string;
     outcome: HitOutcome;
     facetId: ArmorFacetId;
     impactAngleDegrees: number;
@@ -86,6 +88,7 @@ const IMPACT_RESOLVERS: { [C in HitCategory]: ImpactResolver<C> } = {
     if (!result) return { action: "IGNORE" };
 
     const armorHit = {
+      tank: target.tank,
       outcome: result.outcome,
       facetId: target.facetId,
       impactAngleDegrees: result.impactAngleDegrees,

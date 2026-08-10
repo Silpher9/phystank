@@ -54,7 +54,9 @@ describe("debug overlay", () => {
     });
     events.emit("RICOCHET", {
       shellId: "shell-debug",
+      tank: tank.root.name,
       point: { x: 0, y: 1.9, z: -2 },
+      normal: { x: 0, y: 0, z: 1 },
       incoming: { x: 0, y: 0, z: -1 },
       outgoing: { x: 1, y: 0, z: -1 },
       retainedSpeed: 30,
@@ -65,10 +67,12 @@ describe("debug overlay", () => {
     });
     events.emit("HIT", {
       shellId: "shell-debug",
+      tank: tank.root.name,
       outcome: HitOutcome.RICOCHET,
       facetId: "FRONT",
       point: { x: 0, y: 1.9, z: -2 },
       normal: { x: 0, y: 0, z: 1 },
+      incoming: { x: 0, y: 0, z: -1 },
       impactAngleDegrees: 75,
       nominalThickness: 160,
       effectiveThickness: 618.2,

@@ -17,6 +17,7 @@ import { DebugOverlaySystem } from "./debug/debug-overlay";
 import { ShotRecoilSystem } from "./tank/shot-recoil";
 import { HullPoseComposer } from "./tank/hull-pose";
 import { DrivingSuspensionSystem } from "./tank/driving-suspension";
+import { HitSuspensionSystem } from "./tank/hit-suspension";
 import "./styles.css";
 
 const canvas = document.querySelector<HTMLCanvasElement>("#game-canvas");
@@ -48,10 +49,15 @@ const hitFeedback = new HitFeedbackSystem(
 );
 const shellSystem = new ShellSystem(scene, gameEvents);
 const playerHullPose = new HullPoseComposer(playerTank);
+const hullPoseTargets = tanks.map((tank) => ({
+  tank,
+  hullPose: tank === playerTank ? playerHullPose : new HullPoseComposer(tank),
+}));
 const shotRecoil = new ShotRecoilSystem(gameEvents, [
   { tank: playerTank, hullPose: playerHullPose },
 ]);
 const drivingSuspension = new DrivingSuspensionSystem(gameEvents, playerHullPose);
+const hitSuspension = new HitSuspensionSystem(gameEvents, hullPoseTargets);
 const playerController = createPlayerController(scene, canvas, playerTank, gameEvents, () => {
   const target = playerController.aimPoint;
   if (target) shellSystem.fire(playerTank, target);
@@ -61,7 +67,8 @@ engine.runRenderLoop(() => {
   playerController.update(deltaSeconds, readDriveInput());
   drivingSuspension.update(deltaSeconds);
   shotRecoil.update(deltaSeconds);
-  playerHullPose.apply();
+  hitSuspension.update(deltaSeconds);
+  hullPoseTargets.forEach(({ hullPose }) => hullPose.apply());
   followPlayer(camera, playerTank.root.position);
   shellSystem.update(deltaSeconds);
   hitFeedback.update(deltaSeconds);
