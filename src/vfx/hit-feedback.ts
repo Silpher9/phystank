@@ -1,4 +1,5 @@
 import type { ArcRotateCamera } from "@babylonjs/core/Cameras/arcRotateCamera";
+import { PointLight } from "@babylonjs/core/Lights/pointLight";
 import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
 import { Color3 } from "@babylonjs/core/Maths/math.color";
 import { Quaternion, Vector3 } from "@babylonjs/core/Maths/math.vector";
@@ -36,10 +37,27 @@ export const HIT_EFFECT_PROFILES = {
 } as const;
 
 export const SHOT_FLASH_TUNING = {
-  lifetime: 0.05,
+  lifetime: 0.025,
   axialLength: 0.68,
+  intermediateOffset: 1.25,
+  intermediateDelay: 0.006,
+  intermediateLifetime: 0.055,
+  secondaryOffset: 2.5,
+  secondaryDelay: 0.016,
+  secondaryLifetime: 0.04,
   emissivePeak: 1.35,
-  dustCount: 7,
+  sparkCount: 8,
+  lightLifetime: 0.03,
+  lightIntensity: 2.2,
+  lightRange: 6,
+  dustCount: 20,
+  dustSkirtCount: 8,
+  dustSkirtAlpha: 0.34,
+  dustSkirtLifetimeSeconds: { minimum: 0.2, maximum: 0.4 },
+  dustAlpha: 0.24,
+  dustLifetimeSeconds: { minimum: 1.5, maximum: 2.6 },
+  dustForwardReach: 4.5,
+  dustLateralReach: 3.2,
 } as const;
 
 export const TRACER_TUNING = {
@@ -76,9 +94,15 @@ type MovingEffect = {
   delay: number;
   age: number;
   growth: number;
+  drag: number;
   initialScale: Vector3;
   emissiveStart?: Color3;
   emissiveEnd?: Color3;
+};
+
+type FlashLight = {
+  light: PointLight;
+  remaining: number;
 };
 
 type FeedbackOptions = Readonly<{
@@ -87,6 +111,7 @@ type FeedbackOptions = Readonly<{
 
 export class HitFeedbackSystem {
   private readonly transients: MovingEffect[] = [];
+  private readonly flashLights: FlashLight[] = [];
   private readonly tracers = new Map<string, Tracer>();
   private readonly unsubscribe: Array<() => void> = [];
   private readonly random: () => number;
@@ -125,6 +150,14 @@ export class HitFeedbackSystem {
     this.updateHud(deltaSeconds);
     this.updateShake(deltaSeconds);
 
+    for (let index = this.flashLights.length - 1; index >= 0; index--) {
+      const flash = this.flashLights[index];
+      flash.remaining -= deltaSeconds;
+      if (flash.remaining > 0) continue;
+      flash.light.dispose();
+      this.flashLights.splice(index, 1);
+    }
+
     for (let index = this.transients.length - 1; index >= 0; index--) {
       const effect = this.transients[index];
       const previousAge = effect.age;
@@ -142,6 +175,7 @@ export class HitFeedbackSystem {
       const activeDelta = Math.min(deltaSeconds, activeAge, effect.age - previousAge);
       effect.mesh.position.addInPlace(effect.velocity.scale(activeDelta));
       effect.velocity.y -= effect.gravity * activeDelta;
+      effect.velocity.scaleInPlace(Math.max(0, 1 - effect.drag * activeDelta));
       const progress = activeAge / effect.lifetime;
       effect.mesh.visibility = Math.min(1, (1 - progress) * 2.5);
       effect.mesh.scaling.copyFrom(effect.initialScale.scale(1 + effect.growth * progress));
@@ -165,8 +199,10 @@ export class HitFeedbackSystem {
       effect.mesh.dispose();
       effect.material.dispose();
     });
+    this.flashLights.forEach((flash) => flash.light.dispose());
     this.tracers.forEach((tracer) => tracer.dispose());
     this.transients.length = 0;
+    this.flashLights.length = 0;
     this.tracers.clear();
   }
 
@@ -175,7 +211,7 @@ export class HitFeedbackSystem {
     const direction = toVector3(event.direction).normalize();
     this.tracers.set(event.shellId, new Tracer(this.scene, event.shellId, position));
     this.spawnFlash(position, direction);
-    this.spawnDust(
+    this.spawnMuzzleDust(
       new Vector3(position.x, 0.12, position.z),
       direction,
       SHOT_FLASH_TUNING.dustCount,
@@ -257,7 +293,27 @@ export class HitFeedbackSystem {
   }
 
   private spawnFlash(point: Vector3, direction: Vector3): void {
-    const color = new Color3(SHOT_FLASH_TUNING.emissivePeak, 0.72, 0.26);
+    const glowColor = new Color3(0.92, 0.24, 0.1);
+    const glow = MeshBuilder.CreateSphere("muzzle-flash-glow", {
+      diameter: 0.2,
+      segments: 4,
+    }, this.scene);
+    glow.position.copyFrom(point.add(direction.scale(0.04)));
+    this.addTransient(glow, {
+      color: glowColor,
+      emissive: true,
+      emissiveEnd: glowColor.scale(0.08),
+      velocity: direction.scale(0.1),
+      lifetime: SHOT_FLASH_TUNING.lifetime,
+      gravity: 0,
+      growth: 0.2,
+    });
+
+    const primaryColor = new Color3(
+      SHOT_FLASH_TUNING.emissivePeak,
+      1.15,
+      0.95,
+    );
     const core = MeshBuilder.CreateBox("muzzle-flash-core", {
       width: 0.13,
       height: 0.13,
@@ -266,7 +322,7 @@ export class HitFeedbackSystem {
     core.position.copyFrom(point.add(direction.scale(SHOT_FLASH_TUNING.axialLength * 0.35)));
     core.rotationQuaternion = lookAlong(direction);
     this.addTransient(core, {
-      color,
+      color: primaryColor,
       emissive: true,
       velocity: direction.scale(0.65),
       lifetime: SHOT_FLASH_TUNING.lifetime,
@@ -274,19 +330,170 @@ export class HitFeedbackSystem {
       growth: 0.2,
     });
 
+    const intermediateColor = new Color3(1.08, 0.34, 0.14);
+    const intermediate = MeshBuilder.CreateCylinder("muzzle-flash-intermediate", {
+      height: 0.16,
+      diameterTop: 0.58,
+      diameterBottom: 0.82,
+      tessellation: 10,
+    }, this.scene);
+    intermediate.position.copyFrom(
+      point.add(direction.scale(SHOT_FLASH_TUNING.intermediateOffset)),
+    );
+    intermediate.rotationQuaternion = alignYAxis(direction);
+    this.addTransient(intermediate, {
+      color: intermediateColor,
+      emissive: true,
+      emissiveEnd: intermediateColor.scale(0.12),
+      velocity: direction.scale(0.42),
+      lifetime: SHOT_FLASH_TUNING.intermediateLifetime,
+      delay: SHOT_FLASH_TUNING.intermediateDelay,
+      gravity: 0,
+      growth: 0.38,
+    });
+
+    const secondaryColor = new Color3(1.16, 0.58, 0.18);
     const burst = MeshBuilder.CreatePolyhedron("muzzle-flash-burst", {
       type: 1,
-      size: 0.28,
+      size: 0.65,
     }, this.scene);
-    burst.position.copyFrom(point.add(direction.scale(0.08)));
+    burst.position.copyFrom(point.add(direction.scale(SHOT_FLASH_TUNING.secondaryOffset)));
+    burst.rotationQuaternion = lookAlong(direction);
+    burst.scaling.set(1.05, 0.82, 1.6);
     this.addTransient(burst, {
-      color,
+      color: secondaryColor,
       emissive: true,
-      velocity: direction.scale(0.25),
-      lifetime: SHOT_FLASH_TUNING.lifetime,
+      emissiveEnd: secondaryColor.scale(0.1),
+      velocity: direction.scale(0.55),
+      lifetime: SHOT_FLASH_TUNING.secondaryLifetime,
+      delay: SHOT_FLASH_TUNING.secondaryDelay,
       gravity: 0,
-      growth: 0.3,
+      growth: 0.5,
     });
+
+    this.spawnMuzzleSparks(point, direction, SHOT_FLASH_TUNING.sparkCount);
+
+    const light = new PointLight(
+      "muzzle-flash-light",
+      point.add(direction.scale(SHOT_FLASH_TUNING.secondaryOffset)),
+      this.scene,
+    );
+    light.diffuse = new Color3(1, 0.48, 0.16);
+    light.specular = new Color3(0.5, 0.16, 0.04);
+    light.intensity = SHOT_FLASH_TUNING.lightIntensity;
+    light.range = SHOT_FLASH_TUNING.lightRange;
+    this.flashLights.push({
+      light,
+      remaining: SHOT_FLASH_TUNING.lightLifetime,
+    });
+  }
+
+  private spawnMuzzleSparks(
+    point: Vector3,
+    direction: Vector3,
+    count: number,
+  ): void {
+    const start = new Color3(1.2, 0.62, 0.2);
+    const end = Color3.FromHexString("#3b160b");
+    for (let index = 0; index < count; index++) {
+      const velocity = this.spread(direction, 0.28).scale(this.range(5, 9));
+      const mesh = MeshBuilder.CreateBox("muzzle-spark", {
+        width: 0.035,
+        height: 0.035,
+        depth: 0.24,
+      }, this.scene);
+      mesh.position.copyFrom(point.add(direction.scale(1.9)));
+      mesh.rotationQuaternion = lookAlong(velocity);
+      this.addTransient(mesh, {
+        color: start,
+        emissive: true,
+        emissiveEnd: end,
+        velocity,
+        lifetime: this.range(0.14, 0.24),
+        gravity: 2,
+        growth: -0.45,
+      });
+    }
+  }
+
+  private spawnMuzzleDust(
+    point: Vector3,
+    direction: Vector3,
+    count: number,
+  ): void {
+    const forward = new Vector3(direction.x, 0, direction.z);
+    if (forward.lengthSquared() < 1e-8) forward.copyFromFloats(0, 0, -1);
+    forward.normalize();
+    const lateral = Vector3.Cross(Vector3.Up(), forward).normalize();
+
+    for (let index = 0; index < count; index++) {
+      const isSkirt = index < SHOT_FLASH_TUNING.dustSkirtCount;
+      const forwardOffset = this.range(
+        0.2,
+        SHOT_FLASH_TUNING.dustForwardReach * (isSkirt ? 0.65 : 0.85),
+      );
+      const lateralOffset = this.range(
+        -SHOT_FLASH_TUNING.dustLateralReach * (isSkirt ? 1 : 0.85),
+        SHOT_FLASH_TUNING.dustLateralReach * (isSkirt ? 1 : 0.85),
+      );
+      const mesh = MeshBuilder.CreateSphere(
+        isSkirt ? "muzzle-dust-skirt" : "muzzle-dust-fine",
+        {
+          diameter: isSkirt
+            ? this.range(0.18, 0.34)
+            : this.range(0.38, 0.68),
+          segments: 4,
+        },
+        this.scene,
+      );
+      mesh.position.copyFrom(
+        point
+          .add(forward.scale(forwardOffset))
+          .add(lateral.scale(lateralOffset))
+          .add(Vector3.Up().scale(this.range(0, 0.12))),
+      );
+      mesh.rotationQuaternion = lookAlong(forward);
+      mesh.scaling.set(
+        this.range(1.25, isSkirt ? 2 : 1.8),
+        this.range(0.22, isSkirt ? 0.38 : 0.48),
+        1,
+      );
+      const velocity = forward
+        .scale(isSkirt ? this.range(2.2, 4.2) : this.range(0.45, 1.35))
+        .add(lateral.scale(
+          isSkirt
+            ? this.range(-3.2, 3.2)
+            : this.range(-1.35, 1.35),
+        ))
+        .add(Vector3.Up().scale(
+          isSkirt
+            ? this.range(0.06, 0.2)
+            : this.range(0.08, 0.32),
+        ));
+      this.addTransient(mesh, {
+        color: Color3.Lerp(
+          Color3.FromHexString("#514b41"),
+          Color3.FromHexString("#6d6454"),
+          this.random(),
+        ),
+        alpha: isSkirt
+          ? SHOT_FLASH_TUNING.dustSkirtAlpha
+          : SHOT_FLASH_TUNING.dustAlpha,
+        velocity,
+        lifetime: isSkirt
+          ? this.range(
+            SHOT_FLASH_TUNING.dustSkirtLifetimeSeconds.minimum,
+            SHOT_FLASH_TUNING.dustSkirtLifetimeSeconds.maximum,
+          )
+          : this.range(
+            SHOT_FLASH_TUNING.dustLifetimeSeconds.minimum,
+            SHOT_FLASH_TUNING.dustLifetimeSeconds.maximum,
+          ),
+        gravity: isSkirt ? 0.8 : 0.12,
+        growth: isSkirt ? 1.4 : 3.2,
+        drag: isSkirt ? 4.5 : 1.1,
+      });
+    }
   }
 
   private spawnImpactCore(
@@ -458,6 +665,7 @@ export class HitFeedbackSystem {
       delay?: number;
       gravity: number;
       growth: number;
+      drag?: number;
     }>,
   ): void {
     const material = new StandardMaterial(`${mesh.name}-material`, this.scene);
@@ -481,6 +689,7 @@ export class HitFeedbackSystem {
       delay,
       age: 0,
       growth: options.growth,
+      drag: options.drag ?? 0,
       initialScale: mesh.scaling.clone(),
       emissiveStart: options.emissive ? options.color : undefined,
       emissiveEnd: options.emissiveEnd,
@@ -624,4 +833,15 @@ function lookAlong(direction: Vector3): Quaternion {
     ? Vector3.Right()
     : Vector3.Up();
   return Quaternion.FromLookDirectionLH(normalized, up);
+}
+
+function alignYAxis(direction: Vector3): Quaternion {
+  const normalized = direction.normalizeToNew();
+  const dot = Math.max(-1, Math.min(1, Vector3.Dot(Vector3.Up(), normalized)));
+  if (dot > 0.999999) return Quaternion.Identity();
+  if (dot < -0.999999) return Quaternion.RotationAxis(Vector3.Right(), Math.PI);
+  return Quaternion.RotationAxis(
+    Vector3.Cross(Vector3.Up(), normalized).normalize(),
+    Math.acos(dot),
+  );
 }
