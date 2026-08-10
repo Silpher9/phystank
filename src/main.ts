@@ -19,6 +19,7 @@ import { HullPoseComposer } from "./tank/hull-pose";
 import { DrivingSuspensionSystem } from "./tank/driving-suspension";
 import { HitSuspensionSystem } from "./tank/hit-suspension";
 import { AimConvergenceSystem } from "./tank/aim-convergence";
+import { AimCursorSystem } from "./aim-cursor";
 import "./styles.css";
 
 const canvas = document.querySelector<HTMLCanvasElement>("#game-canvas");
@@ -51,6 +52,7 @@ const hitFeedback = new HitFeedbackSystem(
 );
 const shellSystem = new ShellSystem(scene, gameEvents);
 const aimConvergence = new AimConvergenceSystem(gameEvents);
+const aimCursor = new AimCursorSystem(scene);
 const playerHullPose = new HullPoseComposer(playerTank);
 const hullPoseTargets = tanks.map((tank) => ({
   tank,
@@ -72,6 +74,11 @@ engine.runRenderLoop(() => {
     turretYawRadians: playerTank.turret.rotation.y,
     aimPoint: playerController.aimPoint,
   });
+  aimCursor.update(
+    playerTank.muzzle.getAbsolutePosition(),
+    playerController.aimPoint,
+    aimConvergence.currentSpreadDegrees,
+  );
   drivingSuspension.update(deltaSeconds);
   shotRecoil.update(deltaSeconds);
   hitSuspension.update(deltaSeconds);
