@@ -13,7 +13,7 @@ permissions:
   issues: write
   pages: write
   id-token: write
-  pull-requests: read
+  pull-requests: write
 
 concurrency:
   group: pages
