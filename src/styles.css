@@ -63,7 +63,9 @@ main,
   letter-spacing: 0.075em;
   opacity: 0;
   transform: translateX(-0.3rem);
-  transition: opacity 90ms linear, transform 90ms linear;
+  transition:
+    opacity 90ms linear,
+    transform 90ms linear;
   pointer-events: none;
 }
 
@@ -107,7 +109,7 @@ main,
   background: #101513e8;
   color: #ccebdd;
   font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
-  pointer-events: none;
+  pointer-events: auto;
 }
 
 .debug-overlay h2 {
@@ -129,4 +131,28 @@ main,
   font: inherit;
   font-size: 0.68rem;
   line-height: 1.45;
+}
+
+.debug-tuning {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.debug-tuning-control {
+  display: grid;
+  grid-template-columns: 7.5rem minmax(5rem, 1fr) 4.5rem;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.68rem;
+}
+
+.debug-tuning-control input {
+  width: 100%;
+  accent-color: #76d9b6;
+}
+
+.debug-tuning-control output {
+  text-align: right;
+  color: #f0d36c;
+  font-variant-numeric: tabular-nums;
 }

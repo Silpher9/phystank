@@ -26,6 +26,18 @@ export type DebugOverlayElements = Readonly<{
   facets: HTMLElement | null;
   aim: HTMLElement | null;
   hit: HTMLElement | null;
+  tuning?: HTMLElement | null;
+}>;
+
+export type DebugTuningControl = Readonly<{
+  id: string;
+  label: string;
+  unit: string;
+  min: number;
+  max: number;
+  step: number;
+  getValue: () => number;
+  setValue: (value: number) => void;
 }>;
 
 type FacetVisual = {
@@ -33,6 +45,12 @@ type FacetVisual = {
   readonly facet: TankFacet;
   readonly line: LinesMesh;
   readonly tip: Mesh;
+};
+
+type TuningControlView = {
+  readonly control: DebugTuningControl;
+  readonly input: HTMLInputElement;
+  readonly output: HTMLOutputElement;
 };
 
 export class DebugOverlaySystem {
@@ -47,6 +65,7 @@ export class DebugOverlaySystem {
   private currentSpreadDegrees = 0;
   private lastShotSpreadDegrees = 0;
   private lastShotDeviationDegrees = 0;
+  private readonly tuningControlViews: TuningControlView[] = [];
 
   constructor(
     private readonly scene: Scene,
@@ -58,25 +77,40 @@ export class DebugOverlaySystem {
       aim: null,
       hit: null,
     },
+    private readonly tuningControls: readonly DebugTuningControl[] = [],
   ) {
     tanks.forEach((tank, tankIndex) => {
-      const color = tankIndex === 0
-        ? Color3.FromHexString("#62d9b2")
-        : Color3.FromHexString("#e0bf63");
+      const color =
+        tankIndex === 0
+          ? Color3.FromHexString("#62d9b2")
+          : Color3.FromHexString("#e0bf63");
       Object.values(tank.facets).forEach((facet) => {
         const pose = readFacetPose(facet);
-        const line = MeshBuilder.CreateLines(`debug-normal-${tank.root.name}-${facet.id}`, {
-          points: [pose.origin, pose.origin.add(pose.normal.scale(NORMAL_LENGTH))],
-          updatable: true,
-        }, scene);
+        const line = MeshBuilder.CreateLines(
+          `debug-normal-${tank.root.name}-${facet.id}`,
+          {
+            points: [
+              pose.origin,
+              pose.origin.add(pose.normal.scale(NORMAL_LENGTH)),
+            ],
+            updatable: true,
+          },
+          scene,
+        );
         line.color = color;
         line.isPickable = false;
         line.setEnabled(false);
-        const tip = MeshBuilder.CreateSphere(`debug-normal-tip-${tank.root.name}-${facet.id}`, {
-          diameter: 0.13,
-          segments: 4,
-        }, scene);
-        tip.position.copyFrom(pose.origin.add(pose.normal.scale(NORMAL_LENGTH)));
+        const tip = MeshBuilder.CreateSphere(
+          `debug-normal-tip-${tank.root.name}-${facet.id}`,
+          {
+            diameter: 0.13,
+            segments: 4,
+          },
+          scene,
+        );
+        tip.position.copyFrom(
+          pose.origin.add(pose.normal.scale(NORMAL_LENGTH)),
+        );
         tip.isPickable = false;
         const tipMaterial = new StandardMaterial(`${tip.name}-material`, scene);
         tipMaterial.disableLighting = true;
@@ -94,6 +128,7 @@ export class DebugOverlaySystem {
       events.on("HIT", (event) => this.showHit(event)),
     );
     if (this.elements.hit) this.elements.hit.textContent = this._lastHitSummary;
+    this.createTuningControls();
   }
 
   get enabled(): boolean {
@@ -155,7 +190,8 @@ export class DebugOverlaySystem {
         `  ${facet.id.padEnd(12)} ${formatSigned(pose.slopeDegrees)}°  ${facet.thickness.toFixed(0).padStart(3)} mm  n(${formatSigned(pose.normal.x)}, ${formatSigned(pose.normal.y)}, ${formatSigned(pose.normal.z)})`,
       );
     }
-    if (this.elements.facets) this.elements.facets.textContent = facetText.join("\n");
+    if (this.elements.facets)
+      this.elements.facets.textContent = facetText.join("\n");
     if (this.elements.aim) {
       this.elements.aim.textContent = [
         `CURRENT SPREAD  ${this.currentSpreadDegrees.toFixed(2)}°`,
@@ -163,6 +199,7 @@ export class DebugOverlaySystem {
         `ACTUAL DEVIATION ${this.lastShotDeviationDegrees.toFixed(2)}°`,
       ].join("\n");
     }
+    this.updateTuningControls();
   }
 
   dispose(): void {
@@ -173,6 +210,56 @@ export class DebugOverlaySystem {
       tip.dispose();
     });
     this.clearPath();
+    this.tuningControlViews.length = 0;
+  }
+
+  private createTuningControls(): void {
+    const container = this.elements.tuning;
+    if (!container || this.tuningControls.length === 0) return;
+
+    container.replaceChildren();
+    this.tuningControls.forEach((control) => {
+      const row = document.createElement("label");
+      row.className = "debug-tuning-control";
+
+      const label = document.createElement("span");
+      label.textContent = control.label;
+
+      const input = document.createElement("input");
+      input.id = `debug-tuning-${control.id}`;
+      input.type = "range";
+      input.min = String(control.min);
+      input.max = String(control.max);
+      input.step = String(control.step);
+      input.setAttribute("aria-label", control.label);
+
+      const output = document.createElement("output");
+      output.htmlFor = input.id;
+      output.className = "debug-tuning-value";
+
+      row.append(label, input, output);
+      container.append(row);
+      const view = { control, input, output };
+      const onInput = (): void => {
+        control.setValue(input.valueAsNumber);
+        this.refreshTuningControl(view);
+      };
+      input.addEventListener("input", onInput);
+      this.unsubscribe.push(() => input.removeEventListener("input", onInput));
+      this.tuningControlViews.push(view);
+      this.refreshTuningControl(view);
+    });
+  }
+
+  private updateTuningControls(): void {
+    this.tuningControlViews.forEach((view) => this.refreshTuningControl(view));
+  }
+
+  private refreshTuningControl(view: TuningControlView): void {
+    const value = view.control.getValue();
+    view.input.value = String(value);
+    view.output.value = `${value.toFixed(2)}${view.control.unit}`;
+    view.output.textContent = view.output.value;
   }
 
   private startPath(event: GameEvents["SHOT_FIRED"]): void {
@@ -192,13 +279,20 @@ export class DebugOverlaySystem {
 
   private markDeflection(event: GameEvents["RICOCHET"]): void {
     if (event.shellId !== this.latestShellId) return;
-    const marker = MeshBuilder.CreatePolyhedron("debug-deflection", {
-      type: 1,
-      size: 0.22,
-    }, this.scene);
+    const marker = MeshBuilder.CreatePolyhedron(
+      "debug-deflection",
+      {
+        type: 1,
+        size: 0.22,
+      },
+      this.scene,
+    );
     marker.position.copyFrom(toVector3(event.point));
     marker.isPickable = false;
-    const material = new StandardMaterial("debug-deflection-material", this.scene);
+    const material = new StandardMaterial(
+      "debug-deflection-material",
+      this.scene,
+    );
     material.disableLighting = true;
     material.emissiveColor = Color3.FromHexString("#e98a45");
     marker.material = material;
@@ -221,15 +315,18 @@ export class DebugOverlaySystem {
   private updatePathLine(): void {
     if (this.pathPoints.length < 2) return;
     const last = this.pathPoints.at(-1) as Vector3;
-    const renderPoints = Array.from(
-      { length: MAX_PATH_POINTS },
-      (_, index) => (this.pathPoints[index] ?? last).clone(),
+    const renderPoints = Array.from({ length: MAX_PATH_POINTS }, (_, index) =>
+      (this.pathPoints[index] ?? last).clone(),
     );
     if (!this.pathLine) {
-      this.pathLine = MeshBuilder.CreateLines("debug-last-shell-path", {
-        points: renderPoints,
-        updatable: true,
-      }, this.scene);
+      this.pathLine = MeshBuilder.CreateLines(
+        "debug-last-shell-path",
+        {
+          points: renderPoints,
+          updatable: true,
+        },
+        this.scene,
+      );
       this.pathLine.color = Color3.FromHexString("#f0d36c");
       this.pathLine.isPickable = false;
       this.pathLine.setEnabled(this._enabled);
@@ -268,11 +365,13 @@ export function readFacetPose(facet: TankFacet): Readonly<{
   return {
     origin,
     normal,
-    slopeDegrees: Math.asin(clamp(normal.y, -1, 1)) * 180 / Math.PI,
+    slopeDegrees: (Math.asin(clamp(normal.y, -1, 1)) * 180) / Math.PI,
   };
 }
 
-function toVector3(vector: Readonly<{ x: number; y: number; z: number }>): Vector3 {
+function toVector3(
+  vector: Readonly<{ x: number; y: number; z: number }>,
+): Vector3 {
   return new Vector3(vector.x, vector.y, vector.z);
 }
 
