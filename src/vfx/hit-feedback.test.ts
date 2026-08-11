@@ -11,6 +11,7 @@ import { createPlayerCamera } from "../camera";
 import {
   HIT_EFFECT_PROFILES,
   IMPACT_VFX_TUNING,
+  RICOCHET_VFX_TUNING,
   SHOT_FLASH_TUNING,
   TRACER_TUNING,
   HitFeedbackSystem,
@@ -404,6 +405,60 @@ describe("gritty hit feedback", () => {
     feedback.update(TRACER_TUNING.ricochetHoldSeconds
       + TRACER_TUNING.ricochetFadeSeconds);
     expect(feedback.activeTracerCount).toBe(0);
+
+    feedback.dispose();
+    scene.dispose();
+    engine.dispose();
+  });
+
+  it("layers a hot gouge, falling sparks, and a short non-emissive smoke puff", () => {
+    const engine = new NullEngine();
+    const scene = new Scene(engine);
+    const camera = createPlayerCamera(scene);
+    const events = new GameEventBus();
+    const feedback = new HitFeedbackSystem(scene, camera, events, null, { random: () => 0.5 });
+    const point = { x: 0, y: 1.2, z: -8 };
+
+    events.emit("RICOCHET", {
+      shellId: "ricochet-impact-vfx",
+      tank: "target",
+      point,
+      normal: { x: 0, y: 0, z: 1 },
+      incoming: { x: 0, y: 0, z: -1 },
+      outgoing: { x: 1, y: 0, z: 0 },
+      retainedSpeed: 382,
+    });
+
+    const gouge = scene.getMeshByName("ricochet-gouge-glow");
+    expect(gouge).not.toBeNull();
+    const gougeMaterial = gouge!.material as StandardMaterial;
+    expect(gougeMaterial.disableLighting).toBe(true);
+    expect(gougeMaterial.emissiveColor.r).toBeGreaterThan(1);
+
+    const sparks = meshesNamed(scene, "ricochet-spark");
+    expect(sparks).toHaveLength(RICOCHET_VFX_TUNING.sparkCount);
+    const sparkMaterial = sparks[0].material as StandardMaterial;
+    expect(sparks.every((mesh) => (mesh.material as StandardMaterial).disableLighting)).toBe(true);
+    expect(sparkMaterial.emissiveColor.r).toBeGreaterThan(1);
+    expect(sparkMaterial.emissiveColor.g).toBeGreaterThan(1);
+    expect(scene.getLightByName("ricochet-impact-light")).not.toBeNull();
+    const initialSparkY = sparks[0].position.y;
+    feedback.update(0.12);
+    feedback.update(0.12);
+    expect(sparks[0].position.y).toBeLessThan(initialSparkY);
+
+    const smoke = meshesNamed(scene, "ricochet-smoke");
+    expect(smoke).toHaveLength(RICOCHET_VFX_TUNING.smokeCount);
+    expect(smoke.every((mesh) => !(mesh.material as StandardMaterial).disableLighting)).toBe(true);
+    expect(smoke.every((mesh) => mesh.material?.alpha === RICOCHET_VFX_TUNING.smokeAlpha)).toBe(true);
+    expect(RICOCHET_VFX_TUNING.gougeGlowLifetimeSeconds.minimum).toBeGreaterThanOrEqual(0.5);
+    expect(RICOCHET_VFX_TUNING.gougeGlowLifetimeSeconds.maximum).toBeLessThanOrEqual(1);
+
+    feedback.update(1);
+    expect(meshesNamed(scene, "ricochet-gouge-glow")).toHaveLength(0);
+    expect(meshesNamed(scene, "ricochet-smoke")).toHaveLength(0);
+    expect(meshesNamed(scene, "ricochet-spark")).toHaveLength(0);
+    expect(scene.getLightByName("ricochet-impact-light")).toBeNull();
 
     feedback.dispose();
     scene.dispose();
