@@ -446,6 +446,9 @@ describe("gritty hit feedback", () => {
     feedback.update(0.12);
     feedback.update(0.12);
     expect(sparks[0].position.y).toBeLessThan(initialSparkY);
+    feedback.update(0.06);
+    gouge!.computeWorldMatrix(true);
+    expect(gouge!.getBoundingInfo().boundingSphere.radiusWorld).toBeGreaterThan(0);
 
     const smoke = meshesNamed(scene, "ricochet-smoke");
     expect(smoke).toHaveLength(RICOCHET_VFX_TUNING.smokeCount);
