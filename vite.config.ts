@@ -1,6 +1,11 @@
 import { defineConfig } from "vite";
 
+const configuredBasePath = process.env.PHYSTANK_BASE_PATH ?? "/phystank/";
+const basePath = configuredBasePath.endsWith("/")
+  ? configuredBasePath
+  : `${configuredBasePath}/`;
+
 export default defineConfig({
-  // The repository is deployed as a GitHub Pages project site.
-  base: "/phystank/",
+  // Production uses the project site path; PR previews inject their own path.
+  base: basePath,
 });
