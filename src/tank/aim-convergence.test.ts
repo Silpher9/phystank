@@ -26,6 +26,21 @@ describe("aim convergence", () => {
     aim.dispose();
   });
 
+  it("keeps a visible residual spread while still improving during the wait", () => {
+    const events = new GameEventBus();
+    const aim = new AimConvergenceSystem(events);
+    events.emit("DRIVE_STATE", { acceleration: 0, turnRate: 0, speed: 0 });
+
+    for (let frame = 0; frame < 60; frame += 1) aim.update(1 / 60, STABLE_AIM);
+    const afterOneSecond = aim.currentSpreadDegrees;
+    expect(afterOneSecond).toBeGreaterThan(AIM_CONVERGENCE_TUNING.MIN_SPREAD_DEGREES);
+    expect(afterOneSecond).toBeLessThan(AIM_CONVERGENCE_TUNING.MAX_SPREAD_DEGREES);
+
+    for (let frame = 0; frame < 60; frame += 1) aim.update(1 / 60, STABLE_AIM);
+    expect(aim.currentSpreadDegrees).toBeLessThan(afterOneSecond);
+    aim.dispose();
+  });
+
   it("blooms while driving and remains inaccurate immediately after stopping", () => {
     const events = new GameEventBus();
     const aim = new AimConvergenceSystem(events);
@@ -53,8 +68,8 @@ describe("aim convergence", () => {
     events.emit("DRIVE_STATE", { acceleration: 0, turnRate: 0.5, speed: 0 });
     const afterHullTurn = aim.update(0.1, STABLE_AIM);
     events.emit("DRIVE_STATE", { acceleration: 0, turnRate: 0, speed: 0 });
-    const afterTurretTurn = aim.update(0.1, { ...STABLE_AIM, turretYawRadians: 0.1 });
-    const afterAimMove = aim.update(0.1, {
+    const afterTurretTurn = aim.update(0.01, { ...STABLE_AIM, turretYawRadians: 0.1 });
+    const afterAimMove = aim.update(0.01, {
       turretYawRadians: 0.1,
       aimPoint: { x: 11, y: 0, z: 0 },
     });
