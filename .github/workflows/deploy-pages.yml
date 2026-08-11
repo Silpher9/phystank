@@ -3,12 +3,17 @@ name: Deploy GitHub Pages
 on:
   push:
     branches: [main]
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, closed]
   workflow_dispatch:
 
 permissions:
   contents: read
+  issues: write
   pages: write
   id-token: write
+  pull-requests: read
 
 concurrency:
   group: pages
@@ -19,16 +24,69 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
-      - run: npm ci
-      - run: npm run check
+
+      - name: Build production and active PR previews
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          rm -rf site
+          mkdir -p site
+
+          PHYSTANK_BASE_PATH="/phystank/" npm ci --ignore-scripts
+          PHYSTANK_BASE_PATH="/phystank/" npm run check
+          cp -R dist/. site/
+          grep -q "/phystank/assets/" site/index.html
+
+          curl --fail-with-body --silent --show-error --location \
+            --header "Accept: application/vnd.github+json" \
+            --header "Authorization: Bearer ${GITHUB_TOKEN}" \
+            --header "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${REPOSITORY}/pulls?state=open&per_page=100" \
+            > "${RUNNER_TEMP}/open-prs.json"
+
+          jq -r '.[] | select(.base.ref == "main") | .number' \
+            "${RUNNER_TEMP}/open-prs.json" \
+            > "${RUNNER_TEMP}/open-prs.tsv"
+
+          while IFS= read -r pr_number; do
+            [ -n "${pr_number}" ] || continue
+            worktree="${RUNNER_TEMP}/phystank-pr-${pr_number}"
+
+            git fetch --no-tags origin "pull/${pr_number}/head"
+            pr_sha="$(git rev-parse FETCH_HEAD)"
+            git worktree add --detach "${worktree}" "${pr_sha}"
+            trap 'git worktree remove --force "${worktree}" 2>/dev/null || true' EXIT
+
+            (
+              cd "${worktree}"
+              PHYSTANK_BASE_PATH="/phystank/preview/${pr_number}/" npm ci --ignore-scripts
+              PHYSTANK_BASE_PATH="/phystank/preview/${pr_number}/" npm run check
+              mkdir -p "${GITHUB_WORKSPACE}/site/preview/${pr_number}"
+              cp -R dist/. "${GITHUB_WORKSPACE}/site/preview/${pr_number}/"
+            )
+            grep -q "/phystank/preview/${pr_number}/assets/" \
+              "site/preview/${pr_number}/index.html"
+
+            git worktree remove --force "${worktree}"
+            trap - EXIT
+          done < "${RUNNER_TEMP}/open-prs.tsv"
+
       - uses: actions/configure-pages@v5
+
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: dist
+          path: site
 
   deploy:
     needs: build
@@ -39,3 +97,39 @@ jobs:
     steps:
       - id: deployment
         uses: actions/deploy-pages@v4
+
+      - name: Publish PR preview link
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const marker = '<!-- phystank-preview -->';
+            const { owner, repo } = context.repo;
+            const issue_number = context.payload.pull_request.number;
+            const previewUrl = `https://${owner}.github.io/${repo}/preview/${issue_number}/`;
+            const isClosed = context.payload.action === 'closed';
+            const body = isClosed
+              ? `${marker}\nPreview verwijderd omdat PR #${issue_number} is gesloten.`
+              : `${marker}\nPreview: ${previewUrl}`;
+            const comments = await github.paginate(
+              github.rest.issues.listComments,
+              { owner, repo, issue_number, per_page: 100 },
+            );
+            const existing = comments.find((comment) =>
+              comment.user?.type === 'Bot' && comment.body?.includes(marker));
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner,
+                repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else if (!isClosed) {
+              await github.rest.issues.createComment({
+                owner,
+                repo,
+                issue_number,
+                body,
+              });
+            }
