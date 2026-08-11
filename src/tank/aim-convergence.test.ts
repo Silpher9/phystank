@@ -48,9 +48,10 @@ describe("aim convergence", () => {
   });
 
   it("keeps the resting spread from collapsing to a point", () => {
-    // De ring mag nooit tot een punt krimpen; dat was de klacht die #52 opriep.
-    // Restonzekerheid is bewust losgelaten (Ingmar, 11 aug): spelers manoeuvreren
-    // toch al, dus de spanning zit in stoppen-of-doorrijden, niet in stilstaand missen.
+    // The ring must never collapse to a point; that was the complaint behind #52.
+    // Residual uncertainty was deliberately dropped (Ingmar, 11 Aug): players are
+    // manoeuvring anyway, so the tension is in stopping versus driving on, not in
+    // missing while stationary.
     const restingRing =
       12 *
       Math.tan((AIM_CONVERGENCE_TUNING.MIN_SPREAD_DEGREES * Math.PI) / 180);
