@@ -41,6 +41,13 @@ describe("aim convergence", () => {
     aim.dispose();
   });
 
+  it("keeps long-range minimum spread wide enough to miss a tank", () => {
+    const ringRadius = 40 * Math.tan(
+      AIM_CONVERGENCE_TUNING.MIN_SPREAD_DEGREES * Math.PI / 180,
+    );
+    expect(ringRadius).toBeGreaterThan(2.2);
+  });
+
   it("blooms while driving and remains inaccurate immediately after stopping", () => {
     const events = new GameEventBus();
     const aim = new AimConvergenceSystem(events);
