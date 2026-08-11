@@ -236,6 +236,12 @@ describe("gritty hit feedback", () => {
     );
     expect(SHOT_FLASH_TUNING.secondaryOffset).toBeGreaterThanOrEqual(1.4);
     expect(SHOT_FLASH_TUNING.secondaryOffset).toBeLessThanOrEqual(3.5);
+    expect(SHOT_FLASH_TUNING.secondaryLifetime).toBeGreaterThanOrEqual(0.08);
+    expect(SHOT_FLASH_TUNING.secondaryLifetime).toBeLessThanOrEqual(0.1);
+    expect(SHOT_FLASH_TUNING.secondarySize).toBeGreaterThan(0.65);
+    expect(SHOT_FLASH_TUNING.secondaryScale.x).toBeGreaterThan(1.05);
+    expect(SHOT_FLASH_TUNING.secondaryScale.z).toBeGreaterThan(1.6);
+    expect(SHOT_FLASH_TUNING.secondaryColor.red).toBeGreaterThan(1.16);
     expect(SHOT_FLASH_TUNING.emissivePeak).toBeLessThanOrEqual(1.35);
     feedback.update(SHOT_FLASH_TUNING.lightLifetime);
     expect(scene.getLightByName("muzzle-flash-light")).toBeNull();
