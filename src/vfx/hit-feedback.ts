@@ -83,6 +83,23 @@ export const IMPACT_VFX_TUNING = {
   groundDustCount: 8,
 } as const;
 
+export const RICOCHET_VFX_TUNING = {
+  sparkCount: 10,
+  sparkGravity: 8,
+  sparkStartColor: { red: 1.25, green: 1.12, blue: 0.72 },
+  sparkEndColor: "#35150e",
+  gougeGlowRadius: 0.2,
+  gougeGlowLifetimeSeconds: { minimum: 0.5, maximum: 1 },
+  gougeGlowStartColor: { red: 1.15, green: 0.24, blue: 0.05 },
+  gougeGlowEndColor: "#35150e",
+  impactLightLifetime: 0.03,
+  impactLightIntensity: 1.8,
+  impactLightRange: 4.5,
+  smokeCount: 3,
+  smokeAlpha: 0.24,
+  smokeLifetimeSeconds: { minimum: 0.3, maximum: 0.6 },
+} as const;
+
 const GROUND_TARGET_ID = "arena-ground";
 
 type MovingEffect = {
@@ -286,9 +303,13 @@ export class HitFeedbackSystem {
 
   private onRicochet(event: GameEvents["RICOCHET"]): void {
     const point = toVector3(event.point);
+    const normal = toVector3(event.normal).normalize();
     const outgoing = toVector3(event.outgoing).normalize();
     this.tracers.get(event.shellId)?.markRicochet(point);
-    this.spawnSparks(point, outgoing, 10);
+    this.spawnRicochetGlow(point, normal);
+    this.spawnRicochetLight(point, normal);
+    this.spawnSparks(point, outgoing, RICOCHET_VFX_TUNING.sparkCount);
+    this.spawnRicochetSmoke(point, normal, RICOCHET_VFX_TUNING.smokeCount);
     this.setCue("RICOCHET", "ricochet");
   }
 
@@ -522,9 +543,56 @@ export class HitFeedbackSystem {
     });
   }
 
+  private spawnRicochetGlow(point: Vector3, normal: Vector3): void {
+    const mesh = MeshBuilder.CreateDisc("ricochet-gouge-glow", {
+      radius: RICOCHET_VFX_TUNING.gougeGlowRadius,
+      tessellation: 12,
+      sideOrientation: Mesh.DOUBLESIDE,
+    }, this.scene);
+    mesh.position.copyFrom(point.add(normal.scale(0.018)));
+    mesh.rotationQuaternion = lookAlong(normal);
+    mesh.scaling.set(1.8, 0.55, 1);
+    this.addTransient(mesh, {
+      color: new Color3(
+        RICOCHET_VFX_TUNING.gougeGlowStartColor.red,
+        RICOCHET_VFX_TUNING.gougeGlowStartColor.green,
+        RICOCHET_VFX_TUNING.gougeGlowStartColor.blue,
+      ),
+      emissive: true,
+      emissiveEnd: Color3.FromHexString(RICOCHET_VFX_TUNING.gougeGlowEndColor),
+      velocity: Vector3.Zero(),
+      lifetime: this.range(
+        RICOCHET_VFX_TUNING.gougeGlowLifetimeSeconds.minimum,
+        RICOCHET_VFX_TUNING.gougeGlowLifetimeSeconds.maximum,
+      ),
+      gravity: 0,
+      growth: 0.15,
+    });
+  }
+
+  private spawnRicochetLight(point: Vector3, normal: Vector3): void {
+    const light = new PointLight(
+      "ricochet-impact-light",
+      point.add(normal.scale(0.08)),
+      this.scene,
+    );
+    light.diffuse = new Color3(1, 0.28, 0.06);
+    light.specular = new Color3(0.72, 0.14, 0.03);
+    light.intensity = RICOCHET_VFX_TUNING.impactLightIntensity;
+    light.range = RICOCHET_VFX_TUNING.impactLightRange;
+    this.flashLights.push({
+      light,
+      remaining: RICOCHET_VFX_TUNING.impactLightLifetime,
+    });
+  }
+
   private spawnSparks(point: Vector3, direction: Vector3, count: number): void {
-    const start = Color3.FromHexString("#b96b32");
-    const end = Color3.FromHexString("#35150e");
+    const start = new Color3(
+      RICOCHET_VFX_TUNING.sparkStartColor.red,
+      RICOCHET_VFX_TUNING.sparkStartColor.green,
+      RICOCHET_VFX_TUNING.sparkStartColor.blue,
+    );
+    const end = Color3.FromHexString(RICOCHET_VFX_TUNING.sparkEndColor);
     for (let index = 0; index < count; index++) {
       const velocity = this.spread(direction, 0.32).scale(this.range(3.2, 6.2));
       const mesh = MeshBuilder.CreateBox("ricochet-spark", { width: 0.045, height: 0.045, depth: 0.32 }, this.scene);
@@ -536,8 +604,37 @@ export class HitFeedbackSystem {
         emissiveEnd: end,
         velocity,
         lifetime: this.range(0.3, 0.5),
-        gravity: 8,
+        gravity: RICOCHET_VFX_TUNING.sparkGravity,
         growth: -0.45,
+      });
+    }
+  }
+
+  private spawnRicochetSmoke(point: Vector3, normal: Vector3, count: number): void {
+    for (let index = 0; index < count; index++) {
+      const mesh = MeshBuilder.CreateSphere("ricochet-smoke", {
+        diameter: this.range(0.16, 0.28),
+        segments: 4,
+      }, this.scene);
+      mesh.position.copyFrom(point.add(normal.scale(0.06)).add(this.randomVector(0.04)));
+      const velocity = normal.scale(this.range(0.1, 0.28))
+        .add(Vector3.Up().scale(this.range(0.18, 0.42)))
+        .add(this.randomVector(0.12));
+      this.addTransient(mesh, {
+        color: Color3.Lerp(
+          Color3.FromHexString("#b8b5ab"),
+          Color3.FromHexString("#e1ded2"),
+          this.random(),
+        ),
+        alpha: RICOCHET_VFX_TUNING.smokeAlpha,
+        velocity,
+        lifetime: this.range(
+          RICOCHET_VFX_TUNING.smokeLifetimeSeconds.minimum,
+          RICOCHET_VFX_TUNING.smokeLifetimeSeconds.maximum,
+        ),
+        gravity: 0,
+        growth: 2.2,
+        drag: 1.4,
       });
     }
   }
