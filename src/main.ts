@@ -16,7 +16,10 @@ import { ShotRecoilSystem } from "./tank/shot-recoil";
 import { HullPoseComposer } from "./tank/hull-pose";
 import { DrivingSuspensionSystem } from "./tank/driving-suspension";
 import { HitSuspensionSystem } from "./tank/hit-suspension";
-import { AimConvergenceSystem } from "./tank/aim-convergence";
+import {
+  AIM_CONVERGENCE_TUNING,
+  AimConvergenceSystem,
+} from "./tank/aim-convergence";
 import { AimCursorSystem } from "./aim-cursor";
 import { getHitTarget } from "./hit-targets";
 import { GunElevationSystem } from "./tank/gun-elevation";
@@ -39,12 +42,31 @@ document.querySelector(".loading")?.remove();
 createRenderingStack(scene, camera);
 
 const gameEvents = new GameEventBus();
-const debugOverlay = new DebugOverlaySystem(scene, gameEvents, tanks, {
-  panel: document.querySelector<HTMLElement>("#debug-overlay"),
-  facets: document.querySelector<HTMLElement>("#debug-facets"),
-  aim: document.querySelector<HTMLElement>("#debug-aim"),
-  hit: document.querySelector<HTMLElement>("#debug-hit"),
-});
+const aimConvergence = new AimConvergenceSystem(gameEvents);
+const debugOverlay = new DebugOverlaySystem(
+  scene,
+  gameEvents,
+  tanks,
+  {
+    panel: document.querySelector<HTMLElement>("#debug-overlay"),
+    facets: document.querySelector<HTMLElement>("#debug-facets"),
+    aim: document.querySelector<HTMLElement>("#debug-aim"),
+    hit: document.querySelector<HTMLElement>("#debug-hit"),
+    tuning: document.querySelector<HTMLElement>("#debug-tuning"),
+  },
+  [
+    {
+      id: "minimum-spread",
+      label: "MIN SPREAD",
+      unit: "°",
+      min: AIM_CONVERGENCE_TUNING.MIN_SPREAD_LOWER_BOUND_DEGREES,
+      max: AIM_CONVERGENCE_TUNING.MAX_SPREAD_DEGREES,
+      step: AIM_CONVERGENCE_TUNING.MIN_SPREAD_STEP_DEGREES,
+      getValue: () => aimConvergence.minimumSpreadDegrees,
+      setValue: (value) => aimConvergence.setMinimumSpreadDegrees(value),
+    },
+  ],
+);
 const hitFeedback = new HitFeedbackSystem(
   scene,
   camera,
@@ -52,7 +74,6 @@ const hitFeedback = new HitFeedbackSystem(
   document.querySelector<HTMLElement>("#hit-status"),
 );
 const shellSystem = new ShellSystem(scene, gameEvents);
-const aimConvergence = new AimConvergenceSystem(gameEvents);
 const aimCursor = new AimCursorSystem(scene);
 const gunElevation = new GunElevationSystem(playerTank);
 const playerHullPose = new HullPoseComposer(playerTank);
@@ -63,15 +84,24 @@ const hullPoseTargets = tanks.map((tank) => ({
 const shotRecoil = new ShotRecoilSystem(gameEvents, [
   { tank: playerTank, hullPose: playerHullPose },
 ]);
-const drivingSuspension = new DrivingSuspensionSystem(gameEvents, playerHullPose);
+const drivingSuspension = new DrivingSuspensionSystem(
+  gameEvents,
+  playerHullPose,
+);
 const hitSuspension = new HitSuspensionSystem(gameEvents, hullPoseTargets);
-const playerController = createPlayerController(scene, canvas, playerTank, gameEvents, () => {
-  const target = playerController.aimPoint;
-  if (target) {
-    gunElevation.update(target);
-    shellSystem.fire(playerTank, aimConvergence.currentSpreadDegrees);
-  }
-});
+const playerController = createPlayerController(
+  scene,
+  canvas,
+  playerTank,
+  gameEvents,
+  () => {
+    const target = playerController.aimPoint;
+    if (target) {
+      gunElevation.update(target);
+      shellSystem.fire(playerTank, aimConvergence.currentSpreadDegrees);
+    }
+  },
+);
 engine.runRenderLoop(() => {
   const deltaSeconds = engine.getDeltaTime() / 1000;
   playerController.update(deltaSeconds, readDriveInput());
@@ -149,16 +179,24 @@ function createPlayerController(
 
   canvas.addEventListener("pointermove", (event) => {
     const bounds = canvas.getBoundingClientRect();
-    const ray = scene.createPickingRay(event.clientX - bounds.left, event.clientY - bounds.top, null, scene.activeCamera);
-    const pick = scene.pickWithRay(ray, (mesh) => (
-      Boolean(getHitTarget(mesh)) && !mesh.isDescendantOf(playerTank.root)
-    ));
+    const ray = scene.createPickingRay(
+      event.clientX - bounds.left,
+      event.clientY - bounds.top,
+      null,
+      scene.activeCamera,
+    );
+    const pick = scene.pickWithRay(
+      ray,
+      (mesh) =>
+        Boolean(getHitTarget(mesh)) && !mesh.isDescendantOf(playerTank.root),
+    );
     if (pick?.hit && pick.pickedPoint) {
       controller.setAimPoint(pick.pickedPoint);
       return;
     }
     const distance = ray.intersectsPlane(groundPlane);
-    if (distance !== null) controller.setAimPoint(ray.origin.add(ray.direction.scale(distance)));
+    if (distance !== null)
+      controller.setAimPoint(ray.origin.add(ray.direction.scale(distance)));
   });
   window.addEventListener("keydown", (event) => {
     if (event.code === "Space") {
@@ -193,5 +231,7 @@ function updateReloadHud(controller: TankController): void {
   const hud = document.querySelector<HTMLElement>("#reload-status");
   if (!hud) return;
   const progress = Math.round(controller.reloadProgress * 100);
-  hud.textContent = controller.isReloading ? `RELOADING ${progress}%` : "CANNON READY — Space = fire";
+  hud.textContent = controller.isReloading
+    ? `RELOADING ${progress}%`
+    : "CANNON READY — Space = fire";
 }
