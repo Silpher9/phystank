@@ -2,7 +2,7 @@ import type { Vector3 } from "../core/ballistics";
 import type { GameEventBus } from "../core/events";
 
 export const AIM_CONVERGENCE_TUNING = {
-  MIN_SPREAD_DEGREES: 0.25,
+  MIN_SPREAD_DEGREES: 3.5,
   MAX_SPREAD_DEGREES: 7,
   TURRET_MOVEMENT_SPREAD_DEGREES: 7,
   CONVERGENCE_RATE_DEGREES_PER_SECOND: 2.25,
