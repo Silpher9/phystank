@@ -47,11 +47,14 @@ describe("aim convergence", () => {
     aim.dispose();
   });
 
-  it("keeps long-range minimum spread wide enough to miss a tank", () => {
-    const ringRadius =
-      40 *
+  it("keeps the resting spread from collapsing to a point", () => {
+    // De ring mag nooit tot een punt krimpen; dat was de klacht die #52 opriep.
+    // Restonzekerheid is bewust losgelaten (Ingmar, 11 aug): spelers manoeuvreren
+    // toch al, dus de spanning zit in stoppen-of-doorrijden, niet in stilstaand missen.
+    const restingRing =
+      12 *
       Math.tan((AIM_CONVERGENCE_TUNING.MIN_SPREAD_DEGREES * Math.PI) / 180);
-    expect(ringRadius).toBeGreaterThan(2.2);
+    expect(restingRing).toBeGreaterThan(0.2);
   });
 
   it("supports a session-only minimum spread override", () => {
@@ -64,7 +67,7 @@ describe("aim convergence", () => {
 
     expect(aim.minimumSpreadDegrees).toBe(2.28);
     expect(aim.currentSpreadDegrees).toBe(2.28);
-    expect(AIM_CONVERGENCE_TUNING.MIN_SPREAD_DEGREES).toBe(3.5);
+    expect(AIM_CONVERGENCE_TUNING.MIN_SPREAD_DEGREES).toBe(1.5);
     aim.dispose();
   });
 
