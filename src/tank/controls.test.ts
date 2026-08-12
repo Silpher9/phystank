@@ -39,6 +39,60 @@ describe("turret turn limiting", () => {
     engine.dispose();
   });
 
+  it("stops before a concrete obstacle instead of driving through it", () => {
+    const engine = new NullEngine();
+    const scene = new Scene(engine);
+    const tank = createTank(scene, {
+      name: "obstacle-collision-tank",
+      profile: "BRAWLER",
+      position: Vector3.Zero(),
+      color: Color3.White(),
+    });
+    const obstacle = {
+      kind: "BOX" as const,
+      id: "concrete-block",
+      center: { x: 0, z: -5 },
+      halfWidth: 1,
+      halfDepth: 1,
+      rotationY: 0,
+    };
+    const controller = new TankController(tank, new GameEventBus(), [obstacle]);
+
+    controller.update(1, { forward: 1, turn: 0 });
+
+    expect(tank.root.position.x).toBe(0);
+    expect(tank.root.position.z).toBe(0);
+
+    scene.dispose();
+    engine.dispose();
+  });
+
+  it("stops before another tank instead of overlapping its hull", () => {
+    const engine = new NullEngine();
+    const scene = new Scene(engine);
+    const tank = createTank(scene, {
+      name: "tank-collision-tank",
+      profile: "BRAWLER",
+      position: Vector3.Zero(),
+      color: Color3.White(),
+    });
+    const otherTank = {
+      kind: "TANK" as const,
+      id: "other-tank",
+      radius: 3.51,
+      getCenter: () => ({ x: 0, z: -8 }),
+    };
+    const controller = new TankController(tank, new GameEventBus(), [otherTank]);
+
+    controller.update(1, { forward: 1, turn: 0 });
+
+    expect(tank.root.position.x).toBe(0);
+    expect(tank.root.position.z).toBe(0);
+
+    scene.dispose();
+    engine.dispose();
+  });
+
   it("keeps the hull's rotated footprint inside the arena walls", () => {
     const engine = new NullEngine();
     const scene = new Scene(engine);

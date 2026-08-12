@@ -1,9 +1,12 @@
 import { Vector3 } from "@babylonjs/core/Maths/math.vector";
 import type { GameEventBus } from "../core/events";
 import { ARENA_SIZE, WALL_THICKNESS } from "../arena";
+import {
+  CONSERVATIVE_ROTATED_HULL_RADIUS,
+  isTankPositionBlocked,
+  type TankCollisionBody,
+} from "./collision";
 import type { TankEntity } from "./tank";
-
-const CONSERVATIVE_ROTATED_HULL_RADIUS = 3.51;
 
 export const CONTROL_TUNING = {
   DRIVE_SPEED: 7,
@@ -25,6 +28,7 @@ export class TankController {
   constructor(
     readonly tank: TankEntity,
     private readonly events: GameEventBus,
+    private readonly collisionBodies: readonly TankCollisionBody[] = [],
   ) {}
 
   setAimPoint(point: Vector3): void {
@@ -39,7 +43,10 @@ export class TankController {
     const speed = input.forward * speedLimit;
     const distance = speed * deltaSeconds;
     const forward = new Vector3(-Math.sin(this.tank.root.rotation.y), 0, -Math.cos(this.tank.root.rotation.y));
-    this.tank.root.position.addInPlace(forward.scale(distance));
+    const intendedPosition = this.tank.root.position.add(forward.scale(distance));
+    if (!isTankPositionBlocked(intendedPosition, this.tank.root.name, this.collisionBodies)) {
+      this.tank.root.position.copyFrom(intendedPosition);
+    }
     this.tank.root.position.x = clamp(this.tank.root.position.x, -CONTROL_TUNING.ARENA_HALF_EXTENT, CONTROL_TUNING.ARENA_HALF_EXTENT);
     this.tank.root.position.z = clamp(this.tank.root.position.z, -CONTROL_TUNING.ARENA_HALF_EXTENT, CONTROL_TUNING.ARENA_HALF_EXTENT);
 
