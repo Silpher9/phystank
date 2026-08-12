@@ -7,7 +7,7 @@ import { TankController } from "./tank/controls";
 import { createTank, type TankEntity } from "./tank/tank";
 import { ShellSystem } from "./shells";
 import { GameEventBus } from "./core/events";
-import { createArena } from "./arena-scene";
+import { ARENA_OBJECT_SPECS, createArena } from "./arena-scene";
 import { createPlayerCamera, followPlayer } from "./camera";
 import { HitFeedbackSystem } from "./vfx/hit-feedback";
 import { createRenderingStack } from "./vfx/rendering";
@@ -24,6 +24,10 @@ import { AimCursorSystem } from "./aim-cursor";
 import { getHitTarget } from "./hit-targets";
 import { GunElevationSystem } from "./tank/gun-elevation";
 import { createSceneLighting } from "./scene-lighting";
+import {
+  CONSERVATIVE_ROTATED_HULL_RADIUS,
+  type TankCollisionBody,
+} from "./tank/collision";
 import "./styles.css";
 
 const canvas = document.querySelector<HTMLCanvasElement>("#game-canvas");
@@ -37,7 +41,7 @@ const engine = new Engine(canvas, true, {
   stencil: true,
 });
 
-const { scene, playerTank, tanks, camera } = createScene(engine);
+const { scene, playerTank, tanks, camera, collisionBodies } = createScene(engine);
 document.querySelector(".loading")?.remove();
 createRenderingStack(scene, camera);
 
@@ -94,6 +98,7 @@ const playerController = createPlayerController(
   canvas,
   playerTank,
   gameEvents,
+  collisionBodies,
   () => {
     const target = playerController.aimPoint;
     if (target) {
@@ -135,6 +140,7 @@ function createScene(engine: Engine): {
   playerTank: TankEntity;
   tanks: readonly TankEntity[];
   camera: ReturnType<typeof createPlayerCamera>;
+  collisionBodies: readonly TankCollisionBody[];
 } {
   const scene = new Scene(engine);
   scene.clearColor = Color4.FromHexString("#171b1aff");
@@ -156,6 +162,28 @@ function createScene(engine: Engine): {
     rotationY: -Math.PI * 0.78,
     color: Color3.FromHexString("#536d75"),
   });
+  const arenaMeshesByName = new Map(arenaMeshes.map((mesh) => [mesh.name, mesh]));
+  const collisionBodies: TankCollisionBody[] = ARENA_OBJECT_SPECS.map((spec) => {
+    const mesh = arenaMeshesByName.get(spec.id);
+    if (!mesh) throw new Error(`Arena collision mesh is missing: ${spec.id}`);
+    return {
+      kind: "BOX",
+      id: spec.id,
+      center: { x: spec.position.x, z: spec.position.z },
+      halfWidth: spec.size.width / 2,
+      halfDepth: spec.size.depth / 2,
+      rotationY: spec.rotationY ?? 0,
+      isActive: () => !mesh.isDisposed() && mesh.isEnabled(),
+    };
+  });
+  for (const tank of [playerTank, targetTank]) {
+    collisionBodies.push({
+      kind: "TANK",
+      id: tank.root.name,
+      radius: CONSERVATIVE_ROTATED_HULL_RADIUS,
+      getCenter: () => tank.root.position,
+    });
+  }
   const ground = arenaMeshes.find((mesh) => mesh.name === "arena-ground");
   if (!ground) throw new Error("Arena ground is missing");
   createSceneLighting(
@@ -164,7 +192,13 @@ function createScene(engine: Engine): {
     scene.meshes.filter((mesh) => mesh !== ground),
   );
   followPlayer(camera, playerTank.root.position);
-  return { scene, playerTank, tanks: [playerTank, targetTank], camera };
+  return {
+    scene,
+    playerTank,
+    tanks: [playerTank, targetTank],
+    camera,
+    collisionBodies,
+  };
 }
 
 function createPlayerController(
@@ -172,9 +206,10 @@ function createPlayerController(
   canvas: HTMLCanvasElement,
   playerTank: TankEntity,
   events: GameEventBus,
+  collisionBodies: readonly TankCollisionBody[],
   onFire: () => void,
 ): TankController {
-  const controller = new TankController(playerTank, events);
+  const controller = new TankController(playerTank, events, collisionBodies);
   const groundPlane = Plane.FromPositionAndNormal(Vector3.Zero(), Vector3.Up());
 
   canvas.addEventListener("pointermove", (event) => {
