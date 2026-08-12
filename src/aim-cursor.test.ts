@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 import {
   AIM_CURSOR_TUNING,
   AimCursorSystem,
+  calculateAimCursorLoopPoint,
   calculateAimCursorRadius,
 } from "./aim-cursor";
 
@@ -18,25 +19,42 @@ describe("aim cursor", () => {
     expect(calculateAimCursorRadius(40, 0.25)).toBeCloseTo(0.17, 2);
   });
 
-  it("moves a contrasting world-space ring to the aim point", () => {
+  it("separates the intended target point from the actual barrel line", () => {
     const engine = new NullEngine();
     const scene = new Scene(engine);
     const cursor = new AimCursorSystem(scene);
     const origin = new Vector3(0, 2.37, 0);
     const aimPoint = new Vector3(0, 1.4, -40);
+    const barrelDirection = new Vector3(1, 0, -1).normalize();
+    const loopPoint = calculateAimCursorLoopPoint(
+      origin,
+      aimPoint,
+      barrelDirection,
+    );
+    expect(loopPoint.x).toBeCloseTo(Math.sqrt(800), 5);
+    expect(loopPoint.z).toBeCloseTo(-Math.sqrt(800), 5);
+    expect(
+      Math.hypot(loopPoint.x - origin.x, loopPoint.z - origin.z),
+    ).toBeCloseTo(40);
 
     expect(cursor.visible).toBe(false);
-    cursor.update(origin, aimPoint, 7);
+    cursor.update(origin, aimPoint, barrelDirection, 7);
 
     const ring = scene.getMeshByName("aim-cursor-spread-ring");
     const contrast = scene.getMeshByName("aim-cursor-contrast-ring");
+    const target = scene.getMeshByName("aim-cursor-target");
     expect(cursor.visible).toBe(true);
     expect(cursor.radius).toBeCloseTo(4.91, 2);
-    expect(ring?.absolutePosition.x).toBeCloseTo(aimPoint.x);
+    expect(ring?.absolutePosition.x).toBeCloseTo(loopPoint.x);
     expect(ring?.absolutePosition.y).toBeCloseTo(
       aimPoint.y + AIM_CURSOR_TUNING.elevation,
     );
-    expect(ring?.absolutePosition.z).toBeCloseTo(aimPoint.z);
+    expect(ring?.absolutePosition.z).toBeCloseTo(loopPoint.z);
+    expect(target?.absolutePosition.x).toBeCloseTo(aimPoint.x);
+    expect(target?.absolutePosition.y).toBeCloseTo(
+      aimPoint.y + AIM_CURSOR_TUNING.elevation,
+    );
+    expect(target?.absolutePosition.z).toBeCloseTo(aimPoint.z);
     expect(ring?.scaling.x).toBeCloseTo(cursor.radius);
     expect(contrast?.scaling.x).toBeCloseTo(cursor.radius);
     const ringMaterial = ring?.material as GreasedLineSimpleMaterial;
@@ -52,13 +70,15 @@ describe("aim cursor", () => {
       "aim-cursor-spread-ring",
       "aim-cursor-contrast-center",
       "aim-cursor-center",
+      "aim-cursor-contrast-target",
+      "aim-cursor-target",
     ]) {
       expect(scene.getMeshByName(name)?.isPickable).toBe(false);
     }
 
     const wideRadius = cursor.radius;
     const closeAimPoint = new Vector3(0, 0, -12);
-    cursor.update(origin, closeAimPoint, 0.25);
+    cursor.update(origin, closeAimPoint, barrelDirection, 0.25);
     expect(cursor.radius).toBeCloseTo(0.05, 2);
     expect(ring?.scaling.x).toBeLessThan(wideRadius);
     expect(contrast?.scaling.x).toBeCloseTo(cursor.radius);
@@ -68,19 +88,21 @@ describe("aim cursor", () => {
     const reachableColor = centerMaterial.color!.clone();
     const positionBeforeWarning = ring!.absolutePosition.clone();
     const radiusBeforeWarning = cursor.radius;
-    cursor.update(origin, closeAimPoint, 0.25, false);
+    cursor.update(origin, closeAimPoint, barrelDirection, 0.25, false);
     expect(cursor.reachable).toBe(false);
     expect(cursor.radius).toBeCloseTo(radiusBeforeWarning);
     expect(ring?.absolutePosition.equalsWithEpsilon(positionBeforeWarning)).toBe(true);
     expect(center.rotation.y).toBeCloseTo(Math.PI / 4);
     expect(centerMaterial.color!.equals(reachableColor)).toBe(false);
 
-    cursor.update(origin, closeAimPoint, 0.25, true);
+    cursor.update(origin, closeAimPoint, barrelDirection, 0.25, true, true);
     expect(cursor.reachable).toBe(true);
     expect(center.rotation.y).toBe(0);
     expect(centerMaterial.color!.equals(reachableColor)).toBe(true);
+    expect(ringMaterial.width).toBe(AIM_CURSOR_TUNING.readyLineWidthPixels);
+    expect(ringMaterial.alpha).toBe(AIM_CURSOR_TUNING.readyAlpha);
 
-    cursor.update(origin, null, 7);
+    cursor.update(origin, null, barrelDirection, 7);
     expect(cursor.visible).toBe(false);
     cursor.dispose();
     scene.dispose();

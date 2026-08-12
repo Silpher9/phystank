@@ -5,7 +5,7 @@ import { Scene } from "@babylonjs/core/scene";
 import { Plane } from "@babylonjs/core/Maths/math.plane";
 import { TankController } from "./tank/controls";
 import { createTank, type TankEntity } from "./tank/tank";
-import { ShellSystem } from "./shells";
+import { getBarrelDirection, ShellSystem } from "./shells";
 import { GameEventBus } from "./core/events";
 import { ARENA_OBJECT_SPECS, createArena } from "./arena-scene";
 import { createPlayerCamera, followPlayer } from "./camera";
@@ -119,11 +119,18 @@ engine.runRenderLoop(() => {
   hitSuspension.update(deltaSeconds);
   hullPoseTargets.forEach(({ hullPose }) => hullPose.apply());
   gunElevation.update(playerController.aimPoint);
+  const barrelDirection = getBarrelDirection(playerTank);
+  const aimReady =
+    gunElevation.reachable &&
+    aimConvergence.currentSpreadDegrees <=
+      aimConvergence.minimumSpreadDegrees + 0.001;
   aimCursor.update(
     playerTank.muzzle.getAbsolutePosition(),
     playerController.aimPoint,
+    barrelDirection,
     aimConvergence.currentSpreadDegrees,
     gunElevation.reachable,
+    aimReady,
   );
   followPlayer(camera, playerTank.root.position);
   shellSystem.update(deltaSeconds);
