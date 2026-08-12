@@ -44,7 +44,10 @@ export const SHOT_FLASH_TUNING = {
   intermediateLifetime: 0.055,
   secondaryOffset: 2.5,
   secondaryDelay: 0.016,
-  secondaryLifetime: 0.04,
+  secondaryLifetime: 0.09,
+  secondarySize: 0.8,
+  secondaryScale: { x: 1.2, y: 0.95, z: 2 },
+  secondaryColor: { red: 1.35, green: 0.68, blue: 0.2 },
   emissivePeak: 1.35,
   sparkCount: 8,
   lightLifetime: 0.03,
@@ -373,14 +376,22 @@ export class HitFeedbackSystem {
       growth: 0.38,
     });
 
-    const secondaryColor = new Color3(1.16, 0.58, 0.18);
+    const secondaryColor = new Color3(
+      SHOT_FLASH_TUNING.secondaryColor.red,
+      SHOT_FLASH_TUNING.secondaryColor.green,
+      SHOT_FLASH_TUNING.secondaryColor.blue,
+    );
     const burst = MeshBuilder.CreatePolyhedron("muzzle-flash-burst", {
       type: 1,
-      size: 0.65,
+      size: SHOT_FLASH_TUNING.secondarySize,
     }, this.scene);
     burst.position.copyFrom(point.add(direction.scale(SHOT_FLASH_TUNING.secondaryOffset)));
     burst.rotationQuaternion = lookAlong(direction);
-    burst.scaling.set(1.05, 0.82, 1.6);
+    burst.scaling.set(
+      SHOT_FLASH_TUNING.secondaryScale.x,
+      SHOT_FLASH_TUNING.secondaryScale.y,
+      SHOT_FLASH_TUNING.secondaryScale.z,
+    );
     this.addTransient(burst, {
       color: secondaryColor,
       emissive: true,
