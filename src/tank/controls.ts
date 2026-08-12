@@ -44,7 +44,12 @@ export class TankController {
     const distance = speed * deltaSeconds;
     const forward = new Vector3(-Math.sin(this.tank.root.rotation.y), 0, -Math.cos(this.tank.root.rotation.y));
     const intendedPosition = this.tank.root.position.add(forward.scale(distance));
-    if (!isTankPositionBlocked(intendedPosition, this.tank.root.name, this.collisionBodies)) {
+    if (!isTankPositionBlocked(
+      intendedPosition,
+      this.tank.root.name,
+      this.collisionBodies,
+      this.tank.root.rotation.y,
+    )) {
       this.tank.root.position.copyFrom(intendedPosition);
     }
     this.tank.root.position.x = clamp(this.tank.root.position.x, -CONTROL_TUNING.ARENA_HALF_EXTENT, CONTROL_TUNING.ARENA_HALF_EXTENT);
