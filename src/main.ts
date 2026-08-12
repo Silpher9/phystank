@@ -25,7 +25,8 @@ import { getHitTarget } from "./hit-targets";
 import { GunElevationSystem } from "./tank/gun-elevation";
 import { createSceneLighting } from "./scene-lighting";
 import {
-  CONSERVATIVE_ROTATED_HULL_RADIUS,
+  TANK_COLLISION_HALF_DEPTH,
+  TANK_COLLISION_HALF_WIDTH,
   type TankCollisionBody,
 } from "./tank/collision";
 import "./styles.css";
@@ -169,19 +170,21 @@ function createScene(engine: Engine): {
     return {
       kind: "BOX",
       id: spec.id,
-      center: { x: spec.position.x, z: spec.position.z },
       halfWidth: spec.size.width / 2,
       halfDepth: spec.size.depth / 2,
-      rotationY: spec.rotationY ?? 0,
+      getCenter: () => ({ x: spec.position.x, z: spec.position.z }),
+      getRotationY: () => spec.rotationY ?? 0,
       isActive: () => !mesh.isDisposed() && mesh.isEnabled(),
     };
   });
   for (const tank of [playerTank, targetTank]) {
     collisionBodies.push({
-      kind: "TANK",
+      kind: "BOX",
       id: tank.root.name,
-      radius: CONSERVATIVE_ROTATED_HULL_RADIUS,
+      halfWidth: TANK_COLLISION_HALF_WIDTH,
+      halfDepth: TANK_COLLISION_HALF_DEPTH,
       getCenter: () => tank.root.position,
+      getRotationY: () => tank.root.rotation.y,
     });
   }
   const ground = arenaMeshes.find((mesh) => mesh.name === "arena-ground");

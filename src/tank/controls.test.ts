@@ -51,10 +51,10 @@ describe("turret turn limiting", () => {
     const obstacle = {
       kind: "BOX" as const,
       id: "concrete-block",
-      center: { x: 0, z: -5 },
       halfWidth: 1,
       halfDepth: 1,
-      rotationY: 0,
+      getCenter: () => ({ x: 0, z: -5 }),
+      getRotationY: () => 0,
     };
     const controller = new TankController(tank, new GameEventBus(), [obstacle]);
 
@@ -77,10 +77,12 @@ describe("turret turn limiting", () => {
       color: Color3.White(),
     });
     const otherTank = {
-      kind: "TANK" as const,
+      kind: "BOX" as const,
       id: "other-tank",
-      radius: 3.51,
+      halfWidth: 2.3,
+      halfDepth: 2.65,
       getCenter: () => ({ x: 0, z: -8 }),
+      getRotationY: () => 0,
     };
     const controller = new TankController(tank, new GameEventBus(), [otherTank]);
 
