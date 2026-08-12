@@ -99,6 +99,27 @@ describe("tank collision", () => {
     expect(longAlongZ).toBe(false);
   });
 
+  it("requires the oblique object's axes to reject a false overlap", () => {
+    const blocked = isTankPositionBlocked(
+      { x: 0, z: 0 },
+      "player-tank",
+      [
+        {
+          kind: "BOX",
+          id: "oblique-long-block",
+          halfWidth: 0.25,
+          halfDepth: 5,
+          getCenter: () => ({ x: 1.2, z: -5.1 }),
+          getRotationY: () => 120 * Math.PI / 180,
+        },
+      ],
+    );
+
+    // The tank axes alone report overlap; the long block's axes provide the
+    // separating axis that proves the two oriented boxes can pass each other.
+    expect(blocked).toBe(false);
+  });
+
   it("keeps the tank's actual non-square extents in the driving body", () => {
     expect(TANK_COLLISION_HALF_WIDTH).toBe(2.3);
     expect(TANK_COLLISION_HALF_DEPTH).toBe(2.65);
