@@ -133,6 +133,7 @@ engine.runRenderLoop(() => {
     gunElevation.reachable,
     aimReady,
     deltaSeconds,
+    playerTank.root,
   );
   followPlayer(camera, playerTank.root.position);
   shellSystem.update(deltaSeconds);
