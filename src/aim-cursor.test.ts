@@ -1,8 +1,13 @@
 import { NullEngine } from "@babylonjs/core/Engines/nullEngine";
+import { Ray } from "@babylonjs/core/Culling/ray";
+import { Color3 } from "@babylonjs/core/Maths/math.color";
 import { GreasedLineSimpleMaterial } from "@babylonjs/core/Materials/GreasedLine/greasedLineSimpleMaterial";
 import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
 import { Vector3 } from "@babylonjs/core/Maths/math.vector";
+import { MeshBuilder } from "@babylonjs/core/Meshes/meshBuilder";
+import { TransformNode } from "@babylonjs/core/Meshes/transformNode";
 import { Scene } from "@babylonjs/core/scene";
+import { HitCategory } from "./core/impacts";
 import { describe, expect, it } from "vitest";
 import {
   AIM_CURSOR_TUNING,
@@ -10,6 +15,8 @@ import {
   calculateAimCursorLoopPoint,
   calculateAimCursorRadius,
 } from "./aim-cursor";
+import { getHitTarget, registerHitTarget } from "./hit-targets";
+import { createTank } from "./tank/tank";
 
 describe("aim cursor", () => {
   it("projects angular spread onto the actual aim distance", () => {
@@ -48,10 +55,139 @@ describe("aim cursor", () => {
     expect(arenaEdgePoint.z).toBeCloseTo(-AIM_CURSOR_TUNING.arenaHalfExtent);
   });
 
+  it("stops at the first registered collision and ignores the own tank", () => {
+    const engine = new NullEngine();
+    const scene = new Scene(engine);
+    const ownTank = createTank(scene, {
+      name: "aim-own-tank",
+      profile: "BRAWLER",
+      position: Vector3.Zero(),
+      color: Color3.FromHexString("#777f47"),
+    });
+    const enemyTank = createTank(scene, {
+      name: "aim-enemy-tank",
+      profile: "ALLROUNDER",
+      position: new Vector3(0, 0, -8),
+      color: Color3.FromHexString("#536d75"),
+    });
+    const wall = MeshBuilder.CreateBox(
+      "aim-test-wall",
+      { width: 8, height: 2, depth: 1 },
+      scene,
+    );
+    wall.position.set(0, 1, -18);
+    const ownTankBlocker = MeshBuilder.CreateBox(
+      "aim-own-tank-blocker",
+      { width: 8, height: 2, depth: 1 },
+      scene,
+    );
+    ownTankBlocker.parent = ownTank.root;
+    ownTankBlocker.position.set(0, 2, -3);
+    registerHitTarget(wall, {
+      category: HitCategory.HARD,
+      targetId: wall.name,
+      equivalentArmor: 400,
+    });
+    registerHitTarget(ownTankBlocker, {
+      category: HitCategory.HARD,
+      targetId: ownTankBlocker.name,
+      equivalentArmor: 400,
+    });
+    ownTank.root.computeWorldMatrix(true);
+    enemyTank.root.computeWorldMatrix(true);
+    wall.computeWorldMatrix(true);
+
+    const cursor = new AimCursorSystem(scene, ownTank.root);
+    const origin = new Vector3(0, 2.37, 0);
+    const barrelDirection = new Vector3(0, -0.08, -1).normalize();
+    const aimPoint = new Vector3(0, 0, -40);
+    cursor.update(
+      origin,
+      aimPoint,
+      barrelDirection,
+      7,
+      true,
+      false,
+      1 / 60,
+    );
+
+    const expectedPick = scene.pickWithRay(
+      new Ray(origin.clone(), barrelDirection.clone(), AIM_CURSOR_TUNING.rayMaxDistance),
+      (mesh) => Boolean(mesh.isPickable)
+        && Boolean(getHitTarget(mesh))
+        && !mesh.isDescendantOf(ownTank.root),
+    );
+    expect(expectedPick?.hit).toBe(true);
+    expect(expectedPick?.pickedMesh?.isDescendantOf(enemyTank.root)).toBe(true);
+    expect(expectedPick?.pickedPoint).not.toBeNull();
+
+    const ring = scene.getMeshByName("aim-cursor-spread-ring");
+    expect(ring?.absolutePosition.x).toBeCloseTo(expectedPick!.pickedPoint!.x);
+    expect(ring?.absolutePosition.y).toBeCloseTo(
+      expectedPick!.pickedPoint!.y + AIM_CURSOR_TUNING.elevation,
+    );
+    expect(ring?.absolutePosition.z).toBeCloseTo(expectedPick!.pickedPoint!.z);
+    expect(cursor.radius).toBeCloseTo(
+      calculateAimCursorRadius(expectedPick!.distance, 7),
+    );
+    const ringNormal = Vector3.TransformNormal(
+      Vector3.Up(),
+      ring!.getWorldMatrix(),
+    ).normalize();
+    expect(Vector3.Dot(ringNormal, barrelDirection)).toBeCloseTo(1, 5);
+
+    cursor.dispose();
+    scene.dispose();
+    engine.dispose();
+  });
+
+  it("uses the registered ground as the fallback collision", () => {
+    const engine = new NullEngine();
+    const scene = new Scene(engine);
+    const ground = MeshBuilder.CreateGround(
+      "aim-test-ground",
+      { width: 100, height: 100 },
+      scene,
+    );
+    registerHitTarget(ground, {
+      category: HitCategory.HARD,
+      targetId: ground.name,
+      equivalentArmor: 400,
+    });
+
+    const cursorOwner = new TransformNode("aim-ground-test-owner", scene);
+    const cursor = new AimCursorSystem(scene, cursorOwner);
+    const origin = new Vector3(0, 2.37, 0);
+    const barrelDirection = new Vector3(0, -8, -57).normalize();
+    const aimPoint = new Vector3(0, 0, -40);
+    cursor.update(origin, aimPoint, barrelDirection, 7);
+
+    const expectedPick = scene.pickWithRay(
+      new Ray(origin.clone(), barrelDirection.clone(), AIM_CURSOR_TUNING.rayMaxDistance),
+      (mesh) => Boolean(mesh.isPickable) && Boolean(getHitTarget(mesh)),
+    );
+    expect(expectedPick?.hit).toBe(true);
+    expect(expectedPick?.pickedMesh).toBe(ground);
+    const ring = scene.getMeshByName("aim-cursor-spread-ring");
+    expect(ring?.absolutePosition.y).toBeCloseTo(
+      AIM_CURSOR_TUNING.groundY + AIM_CURSOR_TUNING.elevation,
+    );
+    expect(ring?.absolutePosition.z).toBeCloseTo(expectedPick!.pickedPoint!.z);
+    expect(cursor.radius).toBeCloseTo(
+      calculateAimCursorRadius(expectedPick!.distance, 7),
+    );
+
+    cursor.dispose();
+    cursorOwner.dispose();
+    scene.dispose();
+    engine.dispose();
+  });
+
   it("separates the intended target point from the actual barrel line", () => {
     const engine = new NullEngine();
     const scene = new Scene(engine);
-    const cursor = new AimCursorSystem(scene);
+    const cursorOwner = new TransformNode("aim-visual-test-owner", scene);
+    const cursor = new AimCursorSystem(scene, cursorOwner);
     const origin = new Vector3(0, 2.37, 0);
     const aimPoint = new Vector3(0, 1.4, -40);
     const depression = 8 * Math.PI / 180;
@@ -97,6 +233,11 @@ describe("aim cursor", () => {
     expect(target?.absolutePosition.z).toBeCloseTo(aimPoint.z);
     expect(ring?.scaling.x).toBeCloseTo(cursor.radius);
     expect(contrast?.scaling.x).toBeCloseTo(cursor.radius);
+    const ringNormal = Vector3.TransformNormal(
+      Vector3.Up(),
+      ring!.getWorldMatrix(),
+    ).normalize();
+    expect(Vector3.Dot(ringNormal, barrelDirection)).toBeCloseTo(1, 5);
     const ringMaterial = ring?.material as GreasedLineSimpleMaterial;
     const contrastMaterial = contrast?.material as GreasedLineSimpleMaterial;
     const targetMaterial = target?.material as StandardMaterial;
@@ -192,6 +333,7 @@ describe("aim cursor", () => {
     cursor.update(origin, null, barrelDirection, 7);
     expect(cursor.visible).toBe(false);
     cursor.dispose();
+    cursorOwner.dispose();
     scene.dispose();
     engine.dispose();
   });

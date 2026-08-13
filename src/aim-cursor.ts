@@ -1,5 +1,6 @@
 import { Color3 } from "@babylonjs/core/Maths/math.color";
-import { Vector3 } from "@babylonjs/core/Maths/math.vector";
+import { Quaternion, Vector3 } from "@babylonjs/core/Maths/math.vector";
+import { Ray } from "@babylonjs/core/Culling/ray";
 import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
 import { GreasedLineSimpleMaterial } from "@babylonjs/core/Materials/GreasedLine/greasedLineSimpleMaterial";
 import { GreasedLineMeshMaterialType } from "@babylonjs/core/Materials/GreasedLine/greasedLineMaterialInterfaces";
@@ -12,6 +13,7 @@ import type { LinesMesh } from "@babylonjs/core/Meshes/linesMesh";
 import { TransformNode } from "@babylonjs/core/Meshes/transformNode";
 import type { Scene } from "@babylonjs/core/scene";
 import { ARENA_SIZE, WALL_THICKNESS } from "./arena";
+import { getHitTarget } from "./hit-targets";
 
 export const AIM_CURSOR_TUNING = {
   elevation: 0.06,
@@ -25,6 +27,7 @@ export const AIM_CURSOR_TUNING = {
   targetHeight: 0.012,
   groundY: 0,
   arenaHalfExtent: ARENA_SIZE / 2 - WALL_THICKNESS / 2,
+  rayMaxDistance: ARENA_SIZE * 2,
   targetSmoothingRate: 25,
   tetherHideDistance: 0.3,
   tetherDashSize: 3,
@@ -114,6 +117,7 @@ export class AimCursorSystem {
   private readonly target: AbstractMesh;
   private readonly contrastTarget: AbstractMesh;
   private readonly tether: LinesMesh;
+  private readonly ringOrientation = Quaternion.Identity();
   private readonly spreadMaterial: GreasedLineSimpleMaterial;
   private readonly centerMaterial: GreasedLineSimpleMaterial;
   private readonly targetMaterial: StandardMaterial;
@@ -124,9 +128,13 @@ export class AimCursorSystem {
   private _reachable = true;
   private displayedAimPoint: Vector3 | null = null;
 
-  constructor(private readonly scene: Scene) {
+  constructor(
+    private readonly scene: Scene,
+    private readonly excludedRoot: TransformNode,
+  ) {
     this.root = new TransformNode("aim-cursor", scene);
     this.targetRoot = new TransformNode("aim-cursor-target-root", scene);
+    this.root.rotationQuaternion = this.ringOrientation;
     const contrastRing = createCursorLine(
       "aim-cursor-contrast-ring",
       createArcSegments(),
@@ -256,10 +264,14 @@ export class AimCursorSystem {
       return;
     }
 
-    const loopPoint = calculateAimCursorLoopPoint(origin, aimPoint, barrelDirection);
-    const distance = Math.hypot(loopPoint.x - origin.x, loopPoint.z - origin.z);
+    const collision = this.findFirstCollision(origin, barrelDirection);
+    const loopPoint = collision?.point
+      ?? calculateAimCursorLoopPoint(origin, aimPoint, barrelDirection);
+    const distance = collision?.distance
+      ?? Math.hypot(loopPoint.x - origin.x, loopPoint.z - origin.z);
     this._radius = calculateAimCursorRadius(distance, spreadDegrees);
     this._reachable = reachable;
+    this.updateRingOrientation(barrelDirection);
     this.updateDisplayedAimPoint(aimPoint, deltaSeconds);
     const displayedAimPoint = this.displayedAimPoint;
     if (!displayedAimPoint) return;
@@ -347,6 +359,60 @@ export class AimCursorSystem {
       this.scene,
     );
     this.tether.setEnabled(true);
+  }
+
+  private updateRingOrientation(barrelDirection: Point): void {
+    const direction = new Vector3(
+      barrelDirection.x,
+      barrelDirection.y,
+      barrelDirection.z,
+    );
+    const lengthSquared = direction.lengthSquared();
+    if (!Number.isFinite(lengthSquared) || lengthSquared <= Number.EPSILON) {
+      this.ringOrientation.copyFrom(Quaternion.Identity());
+      return;
+    }
+    direction.normalize();
+    Quaternion.FromUnitVectorsToRef(
+      Vector3.Up(),
+      direction,
+      this.ringOrientation,
+    );
+  }
+
+  private findFirstCollision(
+    origin: Point,
+    barrelDirection: Point,
+  ): { point: Vector3; distance: number } | null {
+    const direction = new Vector3(
+      barrelDirection.x,
+      barrelDirection.y,
+      barrelDirection.z,
+    );
+    const directionLengthSquared = direction.lengthSquared();
+    if (!Number.isFinite(directionLengthSquared) || directionLengthSquared <= Number.EPSILON) {
+      return null;
+    }
+    direction.normalize();
+
+    const ray = new Ray(
+      new Vector3(origin.x, origin.y, origin.z),
+      direction,
+      AIM_CURSOR_TUNING.rayMaxDistance,
+    );
+    const pick = this.scene.pickWithRay(
+      ray,
+      (mesh) => Boolean(mesh.isPickable)
+        && Boolean(getHitTarget(mesh))
+        && !mesh.isDescendantOf(this.excludedRoot),
+    );
+    if (!pick?.hit || !pick.pickedPoint || !Number.isFinite(pick.distance)) {
+      return null;
+    }
+    return {
+      point: pick.pickedPoint.clone(),
+      distance: Math.max(0, pick.distance),
+    };
   }
 }
 
