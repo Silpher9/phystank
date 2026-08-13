@@ -14,7 +14,7 @@ import {
   calculateAimCursorLoopPoint,
   calculateAimCursorRadius,
 } from "./aim-cursor";
-import { getHitTarget, registerHitTarget } from "./hit-targets";
+import { isPickableHitTarget, registerHitTarget } from "./hit-targets";
 import { createTank } from "./tank/tank";
 
 describe("aim cursor", () => {
@@ -75,9 +75,21 @@ describe("aim cursor", () => {
       scene,
     );
     wall.position.set(0, 1, -18);
+    const ownTankBlocker = MeshBuilder.CreateBox(
+      "aim-own-tank-blocker",
+      { width: 8, height: 2, depth: 1 },
+      scene,
+    );
+    ownTankBlocker.parent = ownTank.root;
+    ownTankBlocker.position.set(0, 2, -3);
     registerHitTarget(wall, {
       category: HitCategory.HARD,
       targetId: wall.name,
+      equivalentArmor: 400,
+    });
+    registerHitTarget(ownTankBlocker, {
+      category: HitCategory.HARD,
+      targetId: ownTankBlocker.name,
       equivalentArmor: 400,
     });
     ownTank.root.computeWorldMatrix(true);
@@ -101,9 +113,7 @@ describe("aim cursor", () => {
 
     const expectedPick = scene.pickWithRay(
       new Ray(origin.clone(), barrelDirection.clone(), AIM_CURSOR_TUNING.rayMaxDistance),
-      (mesh) => Boolean(mesh.isPickable)
-        && Boolean(getHitTarget(mesh))
-        && !mesh.isDescendantOf(ownTank.root),
+      (mesh) => isPickableHitTarget(mesh, ownTank.root),
     );
     expect(expectedPick?.hit).toBe(true);
     expect(expectedPick?.pickedMesh?.isDescendantOf(enemyTank.root)).toBe(true);
@@ -151,7 +161,7 @@ describe("aim cursor", () => {
 
     const expectedPick = scene.pickWithRay(
       new Ray(origin.clone(), barrelDirection.clone(), AIM_CURSOR_TUNING.rayMaxDistance),
-      (mesh) => Boolean(mesh.isPickable) && Boolean(getHitTarget(mesh)),
+      (mesh) => isPickableHitTarget(mesh),
     );
     expect(expectedPick?.hit).toBe(true);
     expect(expectedPick?.pickedMesh).toBe(ground);

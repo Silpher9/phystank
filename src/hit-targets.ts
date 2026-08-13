@@ -2,6 +2,7 @@ import type { PickingInfo } from "@babylonjs/core/Collisions/pickingInfo";
 import { Vector3 } from "@babylonjs/core/Maths/math.vector";
 import type { AbstractMesh } from "@babylonjs/core/Meshes/abstractMesh";
 import type { TransformNode } from "@babylonjs/core/Meshes/transformNode";
+import type { Node } from "@babylonjs/core/node";
 import type { HitTargetData } from "./core/impacts";
 
 const TARGET_BY_MESH = new WeakMap<AbstractMesh, HitTargetData>();
@@ -19,6 +20,16 @@ export function registerHitTarget(
 
 export function getHitTarget(mesh: AbstractMesh | null | undefined): HitTargetData | undefined {
   return mesh ? TARGET_BY_MESH.get(mesh) : undefined;
+}
+
+/** Returns whether a mesh is a registered aim/shell target outside an optional owner hierarchy. */
+export function isPickableHitTarget(
+  mesh: AbstractMesh | null | undefined,
+  excludedRoot?: Node,
+): boolean {
+  return Boolean(mesh?.isPickable)
+    && Boolean(getHitTarget(mesh))
+    && (!excludedRoot || !mesh!.isDescendantOf(excludedRoot));
 }
 
 /** Returns the registered target's outward-facing world-space normal. */

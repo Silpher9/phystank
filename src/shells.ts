@@ -5,7 +5,11 @@ import type { Vector3 as EventVector3 } from "./core/ballistics";
 import type { GameEventBus } from "./core/events";
 import { resolveImpact } from "./core/impacts";
 import { ARENA_SIZE, WALL_THICKNESS } from "./arena";
-import { getHitNormalFromPick, getHitTarget } from "./hit-targets";
+import {
+  getHitNormalFromPick,
+  getHitTarget,
+  isPickableHitTarget,
+} from "./hit-targets";
 import type { TankEntity } from "./tank/tank";
 
 export const RICOCHET_EPSILON = 0.02;
@@ -120,8 +124,10 @@ class Shell {
     const length = segment.length();
     const ray = new Ray(this.position, segment.normalize(), length);
     const pick = this.scene.pickWithRay(ray, (mesh) => {
-      const target = getHitTarget(mesh);
-      return Boolean(target) && (!this.firstSegment || !mesh.isDescendantOf(this.owner.root));
+      return isPickableHitTarget(
+        mesh,
+        this.firstSegment ? this.owner.root : undefined,
+      );
     });
 
     if (pick?.hit && pick.pickedPoint) {

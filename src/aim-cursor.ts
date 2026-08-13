@@ -13,7 +13,7 @@ import type { LinesMesh } from "@babylonjs/core/Meshes/linesMesh";
 import { TransformNode } from "@babylonjs/core/Meshes/transformNode";
 import type { Scene } from "@babylonjs/core/scene";
 import { ARENA_SIZE, WALL_THICKNESS } from "./arena";
-import { getHitTarget } from "./hit-targets";
+import { isPickableHitTarget } from "./hit-targets";
 
 export const AIM_CURSOR_TUNING = {
   elevation: 0.06,
@@ -401,9 +401,7 @@ export class AimCursorSystem {
     );
     const pick = this.scene.pickWithRay(
       ray,
-      (mesh) => Boolean(mesh.isPickable)
-        && Boolean(getHitTarget(mesh))
-        && (!excludedRoot || !mesh.isDescendantOf(excludedRoot)),
+      (mesh) => isPickableHitTarget(mesh, excludedRoot),
     );
     if (!pick?.hit || !pick.pickedPoint || !Number.isFinite(pick.distance)) {
       return null;
