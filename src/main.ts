@@ -21,7 +21,7 @@ import {
   AimConvergenceSystem,
 } from "./tank/aim-convergence";
 import { AimCursorSystem } from "./aim-cursor";
-import { isPickableHitTarget } from "./hit-targets";
+import { getHitTarget } from "./hit-targets";
 import { GunElevationSystem } from "./tank/gun-elevation";
 import { createSceneLighting } from "./scene-lighting";
 import {
@@ -234,7 +234,8 @@ function createPlayerController(
     );
     const pick = scene.pickWithRay(
       ray,
-      (mesh) => isPickableHitTarget(mesh, playerTank.root),
+      (mesh) =>
+        Boolean(getHitTarget(mesh)) && !mesh.isDescendantOf(playerTank.root),
     );
     if (pick?.hit && pick.pickedPoint) {
       controller.setAimPoint(pick.pickedPoint);
