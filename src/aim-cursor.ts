@@ -11,6 +11,7 @@ import type { AbstractMesh } from "@babylonjs/core/Meshes/abstractMesh";
 import type { LinesMesh } from "@babylonjs/core/Meshes/linesMesh";
 import { TransformNode } from "@babylonjs/core/Meshes/transformNode";
 import type { Scene } from "@babylonjs/core/scene";
+import { ARENA_SIZE, WALL_THICKNESS } from "./arena";
 
 export const AIM_CURSOR_TUNING = {
   elevation: 0.06,
@@ -22,6 +23,8 @@ export const AIM_CURSOR_TUNING = {
   targetRadius: 0.18,
   contrastTargetRadius: 0.24,
   targetHeight: 0.012,
+  groundY: 0,
+  arenaHalfExtent: ARENA_SIZE / 2 - WALL_THICKNESS / 2,
   targetSmoothingRate: 25,
   tetherHideDistance: 0.3,
   tetherDashSize: 3,
@@ -55,32 +58,49 @@ export function calculateAimCursorRadius(
   return safeDistance * Math.tan(safeSpread * Math.PI / 180);
 }
 
-/** Places the spread ring on the horizontal projection of the actual barrel line. */
+/** Places the spread ring where the actual barrel line meets the ground. */
 export function calculateAimCursorLoopPoint(
   origin: Point,
   aimPoint: Point,
   barrelDirection: Point,
 ): Vector3 {
-  const targetDistance = Math.hypot(
-    aimPoint.x - origin.x,
-    aimPoint.z - origin.z,
-  );
   const horizontalBarrelLength = Math.hypot(
     barrelDirection.x,
     barrelDirection.z,
   );
   if (
-    !Number.isFinite(targetDistance) ||
     !Number.isFinite(horizontalBarrelLength) ||
     horizontalBarrelLength <= Number.EPSILON
   ) {
-    return new Vector3(aimPoint.x, aimPoint.y, aimPoint.z);
+    return new Vector3(
+      clamp(aimPoint.x, -AIM_CURSOR_TUNING.arenaHalfExtent, AIM_CURSOR_TUNING.arenaHalfExtent),
+      AIM_CURSOR_TUNING.groundY,
+      clamp(aimPoint.z, -AIM_CURSOR_TUNING.arenaHalfExtent, AIM_CURSOR_TUNING.arenaHalfExtent),
+    );
   }
 
+  const horizontalX = barrelDirection.x / horizontalBarrelLength;
+  const horizontalZ = barrelDirection.z / horizontalBarrelLength;
+  const arenaDistance = calculateArenaBoundaryDistance(
+    origin.x,
+    origin.z,
+    horizontalX,
+    horizontalZ,
+  );
+  const rayDistance =
+    (AIM_CURSOR_TUNING.groundY - origin.y) / barrelDirection.y;
+  const groundDistance = Number.isFinite(rayDistance) && rayDistance > 0
+    ? rayDistance * horizontalBarrelLength
+    : Number.POSITIVE_INFINITY;
+  const distance = Math.min(arenaDistance, groundDistance);
+
+  if (!Number.isFinite(distance) || distance < 0) {
+    return new Vector3(aimPoint.x, AIM_CURSOR_TUNING.groundY, aimPoint.z);
+  }
   return new Vector3(
-    origin.x + barrelDirection.x / horizontalBarrelLength * targetDistance,
-    aimPoint.y,
-    origin.z + barrelDirection.z / horizontalBarrelLength * targetDistance,
+    origin.x + horizontalX * distance,
+    AIM_CURSOR_TUNING.groundY,
+    origin.z + horizontalZ * distance,
   );
 }
 
@@ -236,16 +256,16 @@ export class AimCursorSystem {
       return;
     }
 
-    const distance = Math.hypot(aimPoint.x - origin.x, aimPoint.z - origin.z);
+    const loopPoint = calculateAimCursorLoopPoint(origin, aimPoint, barrelDirection);
+    const distance = Math.hypot(loopPoint.x - origin.x, loopPoint.z - origin.z);
     this._radius = calculateAimCursorRadius(distance, spreadDegrees);
     this._reachable = reachable;
     this.updateDisplayedAimPoint(aimPoint, deltaSeconds);
     const displayedAimPoint = this.displayedAimPoint;
     if (!displayedAimPoint) return;
-    const loopPoint = calculateAimCursorLoopPoint(origin, aimPoint, barrelDirection);
     this.root.position.set(
       loopPoint.x,
-      aimPoint.y + AIM_CURSOR_TUNING.elevation,
+      loopPoint.y + AIM_CURSOR_TUNING.elevation,
       loopPoint.z,
     );
     this.targetRoot.position.set(
@@ -374,6 +394,32 @@ function createTargetDisc(
   material.alpha = 0.96;
   mesh.material = material;
   return { mesh, material };
+}
+
+function calculateArenaBoundaryDistance(
+  originX: number,
+  originZ: number,
+  directionX: number,
+  directionZ: number,
+): number {
+  const halfExtent = AIM_CURSOR_TUNING.arenaHalfExtent;
+  const candidates = [
+    directionX > Number.EPSILON
+      ? (halfExtent - originX) / directionX
+      : directionX < -Number.EPSILON
+        ? (-halfExtent - originX) / directionX
+        : Number.POSITIVE_INFINITY,
+    directionZ > Number.EPSILON
+      ? (halfExtent - originZ) / directionZ
+      : directionZ < -Number.EPSILON
+        ? (-halfExtent - originZ) / directionZ
+        : Number.POSITIVE_INFINITY,
+  ].filter((distance) => Number.isFinite(distance) && distance >= 0);
+  return candidates.length > 0 ? Math.min(...candidates) : 0;
+}
+
+function clamp(value: number, minimum: number, maximum: number): number {
+  return Math.min(Math.max(value, minimum), maximum);
 }
 
 function createArcSegments(): Vector3[][] {

@@ -20,23 +20,55 @@ describe("aim cursor", () => {
     expect(calculateAimCursorRadius(40, 0.25)).toBeCloseTo(0.17, 2);
   });
 
+  it("anchors the loop ring at ground impact and clamps it to the arena", () => {
+    const origin = { x: 0, y: 2.37, z: 0 };
+    const aimPoint = { x: 0, y: 0, z: -3 };
+    const eightDegrees = 8 * Math.PI / 180;
+    const eightDegreeDirection = new Vector3(
+      0,
+      -Math.sin(eightDegrees),
+      -Math.cos(eightDegrees),
+    );
+    const groundPoint = calculateAimCursorLoopPoint(
+      origin,
+      aimPoint,
+      eightDegreeDirection,
+    );
+    expect(groundPoint.y).toBe(AIM_CURSOR_TUNING.groundY);
+    expect(
+      Math.hypot(groundPoint.x - origin.x, groundPoint.z - origin.z),
+    ).toBeCloseTo(origin.y / Math.tan(eightDegrees), 2);
+
+    const oneDegree = Math.PI / 180;
+    const arenaEdgePoint = calculateAimCursorLoopPoint(
+      origin,
+      aimPoint,
+      new Vector3(0, -Math.sin(oneDegree), -Math.cos(oneDegree)),
+    );
+    expect(arenaEdgePoint.z).toBeCloseTo(-AIM_CURSOR_TUNING.arenaHalfExtent);
+  });
+
   it("separates the intended target point from the actual barrel line", () => {
     const engine = new NullEngine();
     const scene = new Scene(engine);
     const cursor = new AimCursorSystem(scene);
     const origin = new Vector3(0, 2.37, 0);
     const aimPoint = new Vector3(0, 1.4, -40);
-    const barrelDirection = new Vector3(1, 0, -1).normalize();
+    const depression = 8 * Math.PI / 180;
+    const barrelDirection = new Vector3(
+      Math.cos(depression) / Math.sqrt(2),
+      -Math.sin(depression),
+      -Math.cos(depression) / Math.sqrt(2),
+    );
     const loopPoint = calculateAimCursorLoopPoint(
       origin,
       aimPoint,
       barrelDirection,
     );
-    expect(loopPoint.x).toBeCloseTo(Math.sqrt(800), 5);
-    expect(loopPoint.z).toBeCloseTo(-Math.sqrt(800), 5);
     expect(
       Math.hypot(loopPoint.x - origin.x, loopPoint.z - origin.z),
-    ).toBeCloseTo(40);
+    ).toBeCloseTo(origin.y / Math.tan(depression), 2);
+    expect(loopPoint.y).toBe(AIM_CURSOR_TUNING.groundY);
 
     expect(cursor.visible).toBe(false);
     cursor.update(origin, aimPoint, barrelDirection, 7);
@@ -47,10 +79,15 @@ describe("aim cursor", () => {
     const contrastTarget = scene.getMeshByName("aim-cursor-contrast-target");
     const tether = scene.getMeshByName("aim-cursor-tether");
     expect(cursor.visible).toBe(true);
-    expect(cursor.radius).toBeCloseTo(4.91, 2);
+    expect(cursor.radius).toBeCloseTo(
+      calculateAimCursorRadius(
+        Math.hypot(loopPoint.x - origin.x, loopPoint.z - origin.z),
+        7,
+      ),
+    );
     expect(ring?.absolutePosition.x).toBeCloseTo(loopPoint.x);
     expect(ring?.absolutePosition.y).toBeCloseTo(
-      aimPoint.y + AIM_CURSOR_TUNING.elevation,
+      AIM_CURSOR_TUNING.groundY + AIM_CURSOR_TUNING.elevation,
     );
     expect(ring?.absolutePosition.z).toBeCloseTo(loopPoint.z);
     expect(target?.absolutePosition.x).toBeCloseTo(aimPoint.x);
@@ -104,7 +141,7 @@ describe("aim cursor", () => {
     expect(target!.absolutePosition.x).toBeLessThan(nextAimPoint.x);
     expect(tether?.isEnabled()).toBe(true);
 
-    const alignedBarrelDirection = new Vector3(20, 0, -40).normalize();
+    const alignedBarrelDirection = new Vector3(20, -origin.y, -40).normalize();
     cursor.update(
       origin,
       nextAimPoint,
@@ -120,7 +157,8 @@ describe("aim cursor", () => {
 
     const wideRadius = cursor.radius;
     const closeAimPoint = new Vector3(0, 0, -12);
-    cursor.update(origin, closeAimPoint, barrelDirection, 0.25);
+    const closeBarrelDirection = new Vector3(0, -2.37, -11.46).normalize();
+    cursor.update(origin, closeAimPoint, closeBarrelDirection, 0.25);
     expect(cursor.radius).toBeCloseTo(0.05, 2);
     expect(ring?.scaling.x).toBeLessThan(wideRadius);
     expect(contrast?.scaling.x).toBeCloseTo(cursor.radius);
@@ -130,14 +168,21 @@ describe("aim cursor", () => {
     const reachableColor = centerMaterial.color!.clone();
     const positionBeforeWarning = ring!.absolutePosition.clone();
     const radiusBeforeWarning = cursor.radius;
-    cursor.update(origin, closeAimPoint, barrelDirection, 0.25, false);
+    cursor.update(origin, closeAimPoint, closeBarrelDirection, 0.25, false);
     expect(cursor.reachable).toBe(false);
     expect(cursor.radius).toBeCloseTo(radiusBeforeWarning);
     expect(ring?.absolutePosition.equalsWithEpsilon(positionBeforeWarning)).toBe(true);
     expect(center.rotation.y).toBeCloseTo(Math.PI / 4);
     expect(centerMaterial.color!.equals(reachableColor)).toBe(false);
 
-    cursor.update(origin, closeAimPoint, barrelDirection, 0.25, true, true);
+    cursor.update(
+      origin,
+      closeAimPoint,
+      closeBarrelDirection,
+      0.25,
+      true,
+      true,
+    );
     expect(cursor.reachable).toBe(true);
     expect(center.rotation.y).toBe(0);
     expect(centerMaterial.color!.equals(reachableColor)).toBe(true);
