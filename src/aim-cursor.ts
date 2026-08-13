@@ -4,9 +4,11 @@ import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
 import { GreasedLineSimpleMaterial } from "@babylonjs/core/Materials/GreasedLine/greasedLineSimpleMaterial";
 import { GreasedLineMeshMaterialType } from "@babylonjs/core/Materials/GreasedLine/greasedLineMaterialInterfaces";
 import { CreateGreasedLine } from "@babylonjs/core/Meshes/Builders/greasedLineBuilder";
+import { CreateDashedLines } from "@babylonjs/core/Meshes/Builders/linesBuilder";
 import type { GreasedLineBaseMesh } from "@babylonjs/core/Meshes/GreasedLine/greasedLineBaseMesh";
 import { MeshBuilder } from "@babylonjs/core/Meshes/meshBuilder";
 import type { AbstractMesh } from "@babylonjs/core/Meshes/abstractMesh";
+import type { LinesMesh } from "@babylonjs/core/Meshes/linesMesh";
 import { TransformNode } from "@babylonjs/core/Meshes/transformNode";
 import type { Scene } from "@babylonjs/core/scene";
 
@@ -20,6 +22,12 @@ export const AIM_CURSOR_TUNING = {
   targetRadius: 0.18,
   contrastTargetRadius: 0.24,
   targetHeight: 0.012,
+  targetSmoothingRate: 25,
+  tetherHideDistance: 0.3,
+  tetherDashSize: 3,
+  tetherGapSize: 2,
+  tetherDashCount: 8,
+  tetherAlpha: 0.5,
   settlingAlpha: 0.68,
   readyAlpha: 0.98,
   arcDegrees: 54,
@@ -32,6 +40,7 @@ const AIM_CURSOR_COLORS = {
   reachable: Color3.FromHexString("#d9d4bd"),
   unreachable: Color3.FromHexString("#a9654f"),
   target: Color3.FromHexString("#b8d6df"),
+  tether: Color3.FromHexString("#899287"),
 } as const;
 
 type Point = Readonly<{ x: number; y: number; z: number }>;
@@ -84,6 +93,7 @@ export class AimCursorSystem {
   private readonly contrastCenter: GreasedLineBaseMesh;
   private readonly target: AbstractMesh;
   private readonly contrastTarget: AbstractMesh;
+  private readonly tether: LinesMesh;
   private readonly spreadMaterial: GreasedLineSimpleMaterial;
   private readonly centerMaterial: GreasedLineSimpleMaterial;
   private readonly targetMaterial: StandardMaterial;
@@ -92,6 +102,7 @@ export class AimCursorSystem {
   >;
   private _radius = 0;
   private _reachable = true;
+  private displayedAimPoint: Vector3 | null = null;
 
   constructor(private readonly scene: Scene) {
     this.root = new TransformNode("aim-cursor", scene);
@@ -138,6 +149,19 @@ export class AimCursorSystem {
       AIM_CURSOR_COLORS.target,
       scene,
     );
+    this.tether = CreateDashedLines(
+      "aim-cursor-tether",
+      {
+        points: [Vector3.Zero(), new Vector3(0, 0, 0.001)],
+        dashSize: AIM_CURSOR_TUNING.tetherDashSize,
+        gapSize: AIM_CURSOR_TUNING.tetherGapSize,
+        dashNb: AIM_CURSOR_TUNING.tetherDashCount,
+        updatable: true,
+      },
+      scene,
+    );
+    this.tether.color = AIM_CURSOR_COLORS.tether.clone();
+    this.tether.alpha = AIM_CURSOR_TUNING.tetherAlpha;
     this.contrastRing = contrastRing.mesh;
     this.spreadRing = spreadRing.mesh;
     this.contrastCenter = contrastCenter.mesh;
@@ -166,6 +190,8 @@ export class AimCursorSystem {
       mesh.isPickable = false;
       mesh.renderingGroupId = AIM_CURSOR_TUNING.renderingGroupId;
     }
+    this.tether.isPickable = false;
+    this.tether.renderingGroupId = AIM_CURSOR_TUNING.renderingGroupId;
     this.contrastRing.position.y = -0.002;
     this.center.position.y = 0.004;
     this.contrastTarget.position.y = -0.002;
@@ -178,6 +204,7 @@ export class AimCursorSystem {
     );
     this.root.setEnabled(false);
     this.targetRoot.setEnabled(false);
+    this.tether.setEnabled(false);
   }
 
   get radius(): number {
@@ -199,16 +226,22 @@ export class AimCursorSystem {
     spreadDegrees: number,
     reachable = true,
     ready = false,
+    deltaSeconds = 1 / 60,
   ): void {
     if (!aimPoint) {
       this.root.setEnabled(false);
       this.targetRoot.setEnabled(false);
+      this.tether.setEnabled(false);
+      this.displayedAimPoint = null;
       return;
     }
 
     const distance = Math.hypot(aimPoint.x - origin.x, aimPoint.z - origin.z);
     this._radius = calculateAimCursorRadius(distance, spreadDegrees);
     this._reachable = reachable;
+    this.updateDisplayedAimPoint(aimPoint, deltaSeconds);
+    const displayedAimPoint = this.displayedAimPoint;
+    if (!displayedAimPoint) return;
     const loopPoint = calculateAimCursorLoopPoint(origin, aimPoint, barrelDirection);
     this.root.position.set(
       loopPoint.x,
@@ -216,10 +249,14 @@ export class AimCursorSystem {
       loopPoint.z,
     );
     this.targetRoot.position.set(
-      aimPoint.x,
-      aimPoint.y + AIM_CURSOR_TUNING.elevation,
-      aimPoint.z,
+      displayedAimPoint.x,
+      displayedAimPoint.y + AIM_CURSOR_TUNING.elevation,
+      displayedAimPoint.z,
     );
+    this.root.computeWorldMatrix(true);
+    this.targetRoot.computeWorldMatrix(true);
+    this.target.computeWorldMatrix(true);
+    this.contrastTarget.computeWorldMatrix(true);
     this.spreadRing.scaling.set(this._radius, 1, this._radius);
     this.contrastRing.scaling.set(this._radius, 1, this._radius);
     const cursorColor = reachable
@@ -241,6 +278,7 @@ export class AimCursorSystem {
     const warningRotation = reachable ? 0 : Math.PI / 4;
     this.center.rotation.y = warningRotation;
     this.contrastCenter.rotation.y = warningRotation;
+    this.updateTether();
     this.root.setEnabled(true);
     this.targetRoot.setEnabled(true);
   }
@@ -248,7 +286,47 @@ export class AimCursorSystem {
   dispose(): void {
     this.root.dispose();
     this.targetRoot.dispose();
+    this.tether.dispose();
     this.cursorMaterials.forEach((material) => material.dispose());
+  }
+
+  private updateDisplayedAimPoint(
+    aimPoint: Point,
+    deltaSeconds: number,
+  ): void {
+    if (!this.displayedAimPoint) {
+      this.displayedAimPoint = new Vector3(aimPoint.x, aimPoint.y, aimPoint.z);
+      return;
+    }
+
+    const safeDelta = Number.isFinite(deltaSeconds) ? Math.max(0, deltaSeconds) : 0;
+    const smoothing = Math.min(1, safeDelta * AIM_CURSOR_TUNING.targetSmoothingRate);
+    this.displayedAimPoint.x += (aimPoint.x - this.displayedAimPoint.x) * smoothing;
+    this.displayedAimPoint.y += (aimPoint.y - this.displayedAimPoint.y) * smoothing;
+    this.displayedAimPoint.z += (aimPoint.z - this.displayedAimPoint.z) * smoothing;
+  }
+
+  private updateTether(): void {
+    if (!this.displayedAimPoint) return;
+
+    const distance = Math.hypot(
+      this.root.position.x - this.targetRoot.position.x,
+      this.root.position.z - this.targetRoot.position.z,
+    );
+    if (distance <= AIM_CURSOR_TUNING.tetherHideDistance) {
+      this.tether.setEnabled(false);
+      return;
+    }
+
+    CreateDashedLines(
+      this.tether.name,
+      {
+        points: [this.root.position.clone(), this.targetRoot.position.clone()],
+        instance: this.tether,
+      },
+      this.scene,
+    );
+    this.tether.setEnabled(true);
   }
 }
 

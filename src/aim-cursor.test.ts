@@ -45,6 +45,7 @@ describe("aim cursor", () => {
     const contrast = scene.getMeshByName("aim-cursor-contrast-ring");
     const target = scene.getMeshByName("aim-cursor-target");
     const contrastTarget = scene.getMeshByName("aim-cursor-contrast-target");
+    const tether = scene.getMeshByName("aim-cursor-tether");
     expect(cursor.visible).toBe(true);
     expect(cursor.radius).toBeCloseTo(4.91, 2);
     expect(ring?.absolutePosition.x).toBeCloseTo(loopPoint.x);
@@ -81,6 +82,7 @@ describe("aim cursor", () => {
     expect(
       contrastTargetMaterial.diffuseColor.equals(contrastMaterial.color!),
     ).toBe(true);
+    expect(tether?.isEnabled()).toBe(true);
     for (const name of [
       "aim-cursor-contrast-ring",
       "aim-cursor-spread-ring",
@@ -88,9 +90,33 @@ describe("aim cursor", () => {
       "aim-cursor-center",
       "aim-cursor-contrast-target",
       "aim-cursor-target",
+      "aim-cursor-tether",
     ]) {
       expect(scene.getMeshByName(name)?.isPickable).toBe(false);
     }
+
+    const displayedBeforeAimMove = target!.absolutePosition.clone();
+    const nextAimPoint = new Vector3(20, 1.4, -40);
+    cursor.update(origin, nextAimPoint, barrelDirection, 7, true, false, 1 / 60);
+    expect(target!.absolutePosition.x).toBeGreaterThan(
+      displayedBeforeAimMove.x,
+    );
+    expect(target!.absolutePosition.x).toBeLessThan(nextAimPoint.x);
+    expect(tether?.isEnabled()).toBe(true);
+
+    const alignedBarrelDirection = new Vector3(20, 0, -40).normalize();
+    cursor.update(
+      origin,
+      nextAimPoint,
+      alignedBarrelDirection,
+      7,
+      true,
+      false,
+      1,
+    );
+    expect(target!.absolutePosition.x).toBeCloseTo(nextAimPoint.x);
+    expect(target!.absolutePosition.z).toBeCloseTo(nextAimPoint.z);
+    expect(tether?.isEnabled()).toBe(false);
 
     const wideRadius = cursor.radius;
     const closeAimPoint = new Vector3(0, 0, -12);
