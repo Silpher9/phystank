@@ -1,9 +1,12 @@
 import { Color3 } from "@babylonjs/core/Maths/math.color";
 import { Vector3 } from "@babylonjs/core/Maths/math.vector";
+import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
 import { GreasedLineSimpleMaterial } from "@babylonjs/core/Materials/GreasedLine/greasedLineSimpleMaterial";
 import { GreasedLineMeshMaterialType } from "@babylonjs/core/Materials/GreasedLine/greasedLineMaterialInterfaces";
 import { CreateGreasedLine } from "@babylonjs/core/Meshes/Builders/greasedLineBuilder";
 import type { GreasedLineBaseMesh } from "@babylonjs/core/Meshes/GreasedLine/greasedLineBaseMesh";
+import { MeshBuilder } from "@babylonjs/core/Meshes/meshBuilder";
+import type { AbstractMesh } from "@babylonjs/core/Meshes/abstractMesh";
 import { TransformNode } from "@babylonjs/core/Meshes/transformNode";
 import type { Scene } from "@babylonjs/core/scene";
 
@@ -14,8 +17,9 @@ export const AIM_CURSOR_TUNING = {
   contrastWidthPixels: 8,
   centerHalfExtent: 0.13,
   contrastCenterHalfExtent: 0.19,
-  targetHalfExtent: 0.06,
-  contrastTargetHalfExtent: 0.1,
+  targetRadius: 0.18,
+  contrastTargetRadius: 0.24,
+  targetHeight: 0.012,
   settlingAlpha: 0.68,
   readyAlpha: 0.98,
   arcDegrees: 54,
@@ -27,6 +31,7 @@ const AIM_CURSOR_COLORS = {
   contrast: Color3.FromHexString("#252822"),
   reachable: Color3.FromHexString("#d9d4bd"),
   unreachable: Color3.FromHexString("#a9654f"),
+  target: Color3.FromHexString("#b8d6df"),
 } as const;
 
 type Point = Readonly<{ x: number; y: number; z: number }>;
@@ -77,12 +82,14 @@ export class AimCursorSystem {
   private readonly contrastRing: GreasedLineBaseMesh;
   private readonly center: GreasedLineBaseMesh;
   private readonly contrastCenter: GreasedLineBaseMesh;
-  private readonly target: GreasedLineBaseMesh;
-  private readonly contrastTarget: GreasedLineBaseMesh;
+  private readonly target: AbstractMesh;
+  private readonly contrastTarget: AbstractMesh;
   private readonly spreadMaterial: GreasedLineSimpleMaterial;
   private readonly centerMaterial: GreasedLineSimpleMaterial;
-  private readonly targetMaterial: GreasedLineSimpleMaterial;
-  private readonly cursorMaterials: GreasedLineSimpleMaterial[];
+  private readonly targetMaterial: StandardMaterial;
+  private readonly cursorMaterials: Array<
+    GreasedLineSimpleMaterial | StandardMaterial
+  >;
   private _radius = 0;
   private _reachable = true;
 
@@ -117,18 +124,18 @@ export class AimCursorSystem {
       AIM_CURSOR_COLORS.reachable,
       scene,
     );
-    const contrastTarget = createCursorLine(
+    const contrastTarget = createTargetDisc(
       "aim-cursor-contrast-target",
-      createCenterLines(AIM_CURSOR_TUNING.contrastTargetHalfExtent),
-      AIM_CURSOR_TUNING.contrastWidthPixels,
+      AIM_CURSOR_TUNING.contrastTargetRadius,
+      AIM_CURSOR_TUNING.targetHeight,
       AIM_CURSOR_COLORS.contrast,
       scene,
     );
-    const target = createCursorLine(
+    const target = createTargetDisc(
       "aim-cursor-target",
-      createCenterLines(AIM_CURSOR_TUNING.targetHalfExtent),
-      AIM_CURSOR_TUNING.lineWidthPixels,
-      AIM_CURSOR_COLORS.reachable,
+      AIM_CURSOR_TUNING.targetRadius,
+      AIM_CURSOR_TUNING.targetHeight,
+      AIM_CURSOR_COLORS.target,
       scene,
     );
     this.contrastRing = contrastRing.mesh;
@@ -221,7 +228,8 @@ export class AimCursorSystem {
     const isReady = ready && reachable;
     this.spreadMaterial.setColor(cursorColor);
     this.centerMaterial.setColor(cursorColor);
-    this.targetMaterial.setColor(cursorColor);
+    this.targetMaterial.diffuseColor.copyFrom(AIM_CURSOR_COLORS.target);
+    this.targetMaterial.alpha = isReady ? 1 : 0.96;
     this.spreadMaterial.width = isReady
       ? AIM_CURSOR_TUNING.readyLineWidthPixels
       : AIM_CURSOR_TUNING.lineWidthPixels;
@@ -264,6 +272,29 @@ function createCursorLine(
   );
   const material = mesh.material as GreasedLineSimpleMaterial;
   material.alpha = name.includes("contrast") ? 0.95 : 0.92;
+  return { mesh, material };
+}
+
+function createTargetDisc(
+  name: string,
+  radius: number,
+  height: number,
+  color: Color3,
+  scene: Scene,
+): { mesh: AbstractMesh; material: StandardMaterial } {
+  const mesh = MeshBuilder.CreateCylinder(
+    name,
+    { diameter: radius * 2, height, tessellation: 16 },
+    scene,
+  );
+  const material = new StandardMaterial(`${name}-material`, scene);
+  material.diffuseColor = color.clone();
+  material.emissiveColor = color.scale(0.2);
+  material.specularColor = Color3.Black();
+  material.disableLighting = true;
+  material.backFaceCulling = false;
+  material.alpha = 0.96;
+  mesh.material = material;
   return { mesh, material };
 }
 

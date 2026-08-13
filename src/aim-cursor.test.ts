@@ -1,5 +1,6 @@
 import { NullEngine } from "@babylonjs/core/Engines/nullEngine";
 import { GreasedLineSimpleMaterial } from "@babylonjs/core/Materials/GreasedLine/greasedLineSimpleMaterial";
+import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
 import { Vector3 } from "@babylonjs/core/Maths/math.vector";
 import { Scene } from "@babylonjs/core/scene";
 import { describe, expect, it } from "vitest";
@@ -43,6 +44,7 @@ describe("aim cursor", () => {
     const ring = scene.getMeshByName("aim-cursor-spread-ring");
     const contrast = scene.getMeshByName("aim-cursor-contrast-ring");
     const target = scene.getMeshByName("aim-cursor-target");
+    const contrastTarget = scene.getMeshByName("aim-cursor-contrast-target");
     expect(cursor.visible).toBe(true);
     expect(cursor.radius).toBeCloseTo(4.91, 2);
     expect(ring?.absolutePosition.x).toBeCloseTo(loopPoint.x);
@@ -59,12 +61,26 @@ describe("aim cursor", () => {
     expect(contrast?.scaling.x).toBeCloseTo(cursor.radius);
     const ringMaterial = ring?.material as GreasedLineSimpleMaterial;
     const contrastMaterial = contrast?.material as GreasedLineSimpleMaterial;
+    const targetMaterial = target?.material as StandardMaterial;
+    const contrastTargetMaterial = contrastTarget?.material as StandardMaterial;
     expect(AIM_CURSOR_TUNING.lineWidthPixels).toBeGreaterThanOrEqual(3);
     expect(ringMaterial.width).toBe(AIM_CURSOR_TUNING.lineWidthPixels);
     expect(contrastMaterial.width).toBe(AIM_CURSOR_TUNING.contrastWidthPixels);
     expect(contrastMaterial.width).toBeGreaterThan(ringMaterial.width);
     expect(ringMaterial.sizeAttenuation).toBe(true);
     expect(ring?.renderingGroupId).toBe(AIM_CURSOR_TUNING.renderingGroupId);
+    expect(targetMaterial).toBeInstanceOf(StandardMaterial);
+    expect(contrastTargetMaterial).toBeInstanceOf(StandardMaterial);
+    expect(AIM_CURSOR_TUNING.targetRadius).toBeGreaterThan(
+      AIM_CURSOR_TUNING.centerHalfExtent,
+    );
+    expect(targetMaterial.diffuseColor.equals(ringMaterial.color!)).toBe(false);
+    expect(targetMaterial.diffuseColor.b).toBeGreaterThan(
+      targetMaterial.diffuseColor.r,
+    );
+    expect(
+      contrastTargetMaterial.diffuseColor.equals(contrastMaterial.color!),
+    ).toBe(true);
     for (const name of [
       "aim-cursor-contrast-ring",
       "aim-cursor-spread-ring",
