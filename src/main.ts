@@ -79,7 +79,7 @@ const hitFeedback = new HitFeedbackSystem(
   document.querySelector<HTMLElement>("#hit-status"),
 );
 const shellSystem = new ShellSystem(scene, gameEvents);
-const aimCursor = new AimCursorSystem(scene);
+const aimCursor = new AimCursorSystem(scene, playerTank.root);
 const gunElevation = new GunElevationSystem(playerTank);
 const playerHullPose = new HullPoseComposer(playerTank);
 const hullPoseTargets = tanks.map((tank) => ({
@@ -133,7 +133,6 @@ engine.runRenderLoop(() => {
     gunElevation.reachable,
     aimReady,
     deltaSeconds,
-    playerTank.root,
   );
   followPlayer(camera, playerTank.root.position);
   shellSystem.update(deltaSeconds);

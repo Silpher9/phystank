@@ -128,7 +128,10 @@ export class AimCursorSystem {
   private _reachable = true;
   private displayedAimPoint: Vector3 | null = null;
 
-  constructor(private readonly scene: Scene) {
+  constructor(
+    private readonly scene: Scene,
+    private readonly excludedRoot: TransformNode,
+  ) {
     this.root = new TransformNode("aim-cursor", scene);
     this.targetRoot = new TransformNode("aim-cursor-target-root", scene);
     this.root.rotationQuaternion = this.ringOrientation;
@@ -252,7 +255,6 @@ export class AimCursorSystem {
     reachable = true,
     ready = false,
     deltaSeconds = 1 / 60,
-    excludedRoot?: TransformNode,
   ): void {
     if (!aimPoint) {
       this.root.setEnabled(false);
@@ -262,7 +264,7 @@ export class AimCursorSystem {
       return;
     }
 
-    const collision = this.findFirstCollision(origin, barrelDirection, excludedRoot);
+    const collision = this.findFirstCollision(origin, barrelDirection);
     const loopPoint = collision?.point
       ?? calculateAimCursorLoopPoint(origin, aimPoint, barrelDirection);
     const distance = collision?.distance
@@ -381,7 +383,6 @@ export class AimCursorSystem {
   private findFirstCollision(
     origin: Point,
     barrelDirection: Point,
-    excludedRoot?: TransformNode,
   ): { point: Vector3; distance: number } | null {
     const direction = new Vector3(
       barrelDirection.x,
@@ -403,7 +404,7 @@ export class AimCursorSystem {
       ray,
       (mesh) => Boolean(mesh.isPickable)
         && Boolean(getHitTarget(mesh))
-        && (!excludedRoot || !mesh.isDescendantOf(excludedRoot)),
+        && !mesh.isDescendantOf(this.excludedRoot),
     );
     if (!pick?.hit || !pick.pickedPoint || !Number.isFinite(pick.distance)) {
       return null;

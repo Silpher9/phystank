@@ -5,6 +5,7 @@ import { GreasedLineSimpleMaterial } from "@babylonjs/core/Materials/GreasedLine
 import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
 import { Vector3 } from "@babylonjs/core/Maths/math.vector";
 import { MeshBuilder } from "@babylonjs/core/Meshes/meshBuilder";
+import { TransformNode } from "@babylonjs/core/Meshes/transformNode";
 import { Scene } from "@babylonjs/core/scene";
 import { HitCategory } from "./core/impacts";
 import { describe, expect, it } from "vitest";
@@ -75,16 +76,28 @@ describe("aim cursor", () => {
       scene,
     );
     wall.position.set(0, 1, -18);
+    const ownTankBlocker = MeshBuilder.CreateBox(
+      "aim-own-tank-blocker",
+      { width: 8, height: 2, depth: 1 },
+      scene,
+    );
+    ownTankBlocker.parent = ownTank.root;
+    ownTankBlocker.position.set(0, 2, -3);
     registerHitTarget(wall, {
       category: HitCategory.HARD,
       targetId: wall.name,
+      equivalentArmor: 400,
+    });
+    registerHitTarget(ownTankBlocker, {
+      category: HitCategory.HARD,
+      targetId: ownTankBlocker.name,
       equivalentArmor: 400,
     });
     ownTank.root.computeWorldMatrix(true);
     enemyTank.root.computeWorldMatrix(true);
     wall.computeWorldMatrix(true);
 
-    const cursor = new AimCursorSystem(scene);
+    const cursor = new AimCursorSystem(scene, ownTank.root);
     const origin = new Vector3(0, 2.37, 0);
     const barrelDirection = new Vector3(0, -0.08, -1).normalize();
     const aimPoint = new Vector3(0, 0, -40);
@@ -96,7 +109,6 @@ describe("aim cursor", () => {
       true,
       false,
       1 / 60,
-      ownTank.root,
     );
 
     const expectedPick = scene.pickWithRay(
@@ -143,7 +155,8 @@ describe("aim cursor", () => {
       equivalentArmor: 400,
     });
 
-    const cursor = new AimCursorSystem(scene);
+    const cursorOwner = new TransformNode("aim-ground-test-owner", scene);
+    const cursor = new AimCursorSystem(scene, cursorOwner);
     const origin = new Vector3(0, 2.37, 0);
     const barrelDirection = new Vector3(0, -8, -57).normalize();
     const aimPoint = new Vector3(0, 0, -40);
@@ -165,6 +178,7 @@ describe("aim cursor", () => {
     );
 
     cursor.dispose();
+    cursorOwner.dispose();
     scene.dispose();
     engine.dispose();
   });
@@ -172,7 +186,8 @@ describe("aim cursor", () => {
   it("separates the intended target point from the actual barrel line", () => {
     const engine = new NullEngine();
     const scene = new Scene(engine);
-    const cursor = new AimCursorSystem(scene);
+    const cursorOwner = new TransformNode("aim-visual-test-owner", scene);
+    const cursor = new AimCursorSystem(scene, cursorOwner);
     const origin = new Vector3(0, 2.37, 0);
     const aimPoint = new Vector3(0, 1.4, -40);
     const depression = 8 * Math.PI / 180;
@@ -318,6 +333,7 @@ describe("aim cursor", () => {
     cursor.update(origin, null, barrelDirection, 7);
     expect(cursor.visible).toBe(false);
     cursor.dispose();
+    cursorOwner.dispose();
     scene.dispose();
     engine.dispose();
   });
