@@ -118,6 +118,11 @@ describe("aim cursor", () => {
     expect(cursor.radius).toBeCloseTo(
       calculateAimCursorRadius(expectedPick!.distance, 7),
     );
+    const ringNormal = Vector3.TransformNormal(
+      Vector3.Up(),
+      ring!.getWorldMatrix(),
+    ).normalize();
+    expect(Vector3.Dot(ringNormal, barrelDirection)).toBeCloseTo(1, 5);
 
     cursor.dispose();
     scene.dispose();
@@ -213,6 +218,11 @@ describe("aim cursor", () => {
     expect(target?.absolutePosition.z).toBeCloseTo(aimPoint.z);
     expect(ring?.scaling.x).toBeCloseTo(cursor.radius);
     expect(contrast?.scaling.x).toBeCloseTo(cursor.radius);
+    const ringNormal = Vector3.TransformNormal(
+      Vector3.Up(),
+      ring!.getWorldMatrix(),
+    ).normalize();
+    expect(Vector3.Dot(ringNormal, barrelDirection)).toBeCloseTo(1, 5);
     const ringMaterial = ring?.material as GreasedLineSimpleMaterial;
     const contrastMaterial = contrast?.material as GreasedLineSimpleMaterial;
     const targetMaterial = target?.material as StandardMaterial;

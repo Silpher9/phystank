@@ -1,5 +1,5 @@
 import { Color3 } from "@babylonjs/core/Maths/math.color";
-import { Vector3 } from "@babylonjs/core/Maths/math.vector";
+import { Quaternion, Vector3 } from "@babylonjs/core/Maths/math.vector";
 import { Ray } from "@babylonjs/core/Culling/ray";
 import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
 import { GreasedLineSimpleMaterial } from "@babylonjs/core/Materials/GreasedLine/greasedLineSimpleMaterial";
@@ -117,6 +117,7 @@ export class AimCursorSystem {
   private readonly target: AbstractMesh;
   private readonly contrastTarget: AbstractMesh;
   private readonly tether: LinesMesh;
+  private readonly ringOrientation = Quaternion.Identity();
   private readonly spreadMaterial: GreasedLineSimpleMaterial;
   private readonly centerMaterial: GreasedLineSimpleMaterial;
   private readonly targetMaterial: StandardMaterial;
@@ -130,6 +131,7 @@ export class AimCursorSystem {
   constructor(private readonly scene: Scene) {
     this.root = new TransformNode("aim-cursor", scene);
     this.targetRoot = new TransformNode("aim-cursor-target-root", scene);
+    this.root.rotationQuaternion = this.ringOrientation;
     const contrastRing = createCursorLine(
       "aim-cursor-contrast-ring",
       createArcSegments(),
@@ -267,6 +269,7 @@ export class AimCursorSystem {
       ?? Math.hypot(loopPoint.x - origin.x, loopPoint.z - origin.z);
     this._radius = calculateAimCursorRadius(distance, spreadDegrees);
     this._reachable = reachable;
+    this.updateRingOrientation(barrelDirection);
     this.updateDisplayedAimPoint(aimPoint, deltaSeconds);
     const displayedAimPoint = this.displayedAimPoint;
     if (!displayedAimPoint) return;
@@ -354,6 +357,25 @@ export class AimCursorSystem {
       this.scene,
     );
     this.tether.setEnabled(true);
+  }
+
+  private updateRingOrientation(barrelDirection: Point): void {
+    const direction = new Vector3(
+      barrelDirection.x,
+      barrelDirection.y,
+      barrelDirection.z,
+    );
+    const lengthSquared = direction.lengthSquared();
+    if (!Number.isFinite(lengthSquared) || lengthSquared <= Number.EPSILON) {
+      this.ringOrientation.copyFrom(Quaternion.Identity());
+      return;
+    }
+    direction.normalize();
+    Quaternion.FromUnitVectorsToRef(
+      Vector3.Up(),
+      direction,
+      this.ringOrientation,
+    );
   }
 
   private findFirstCollision(
